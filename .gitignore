@@ -1,0 +1,5 @@
+bin/
+.tmp
+tmp-*
+dugtrio-config.yaml
+dugtrio-log.log
