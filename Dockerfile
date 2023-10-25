@@ -11,7 +11,7 @@ RUN <<EOR
   VERSION=$(git rev-parse --short HEAD)
   BUILDTIME=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
   RELEASE=$release
-  CGO_ENABLED=1 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -o /bin/dugtrio-proxy -ldflags="-s -w -X 'github.com/ethpandaops/dugtrio/utils.BuildVersion=${VERSION}' -X 'github.com/ethpandaops/dugtrio/utils.BuildRelease=${RELEASE}' -X 'github.com/ethpandaops/dugtrio/utils.Buildtime=${BUILDTIME}'" ./cmd/dugtrio-proxy
+  CGO_ENABLED=1 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -o /bin/dugtrio-proxy -ldflags="-s -w -X 'github.com/ethpandaops/dugtrio/utils.BuildVersion=${VERSION}' -X 'github.com/ethpandaops/dugtrio/utils.BuildRelease=${RELEASE}' -X 'github.com/ethpandaops/dugtrio/utils.BuildTime=${BUILDTIME}'" ./cmd/dugtrio-proxy
 EOR
 
 # final stage
