@@ -9,6 +9,7 @@ import (
 	eth2client "github.com/attestantio/go-eth2-client"
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/http"
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/rs/zerolog"
 	"github.com/sirupsen/logrus"
 
@@ -107,6 +108,18 @@ func (bc *BeaconClient) GetNodeVersion(ctx context.Context) (string, error) {
 	return result, nil
 }
 
+func (bc *BeaconClient) GetConfigSpecs(ctx context.Context) (map[string]interface{}, error) {
+	provider, isProvider := bc.clientSvc.(eth2client.SpecProvider)
+	if !isProvider {
+		return nil, fmt.Errorf("get specs not supported")
+	}
+	result, err := provider.Spec(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
 func (bc *BeaconClient) GetLatestBlockHead(ctx context.Context) (*v1.BeaconBlockHeader, error) {
 	provider, isProvider := bc.clientSvc.(eth2client.BeaconBlockHeadersProvider)
 	if !isProvider {
@@ -131,7 +144,7 @@ func (bc *BeaconClient) GetFinalityCheckpoints(ctx context.Context) (*v1.Finalit
 	return result, nil
 }
 
-func (bc *BeaconClient) GetBlockHeaderByBlockroot(ctx context.Context, blockroot []byte) (*v1.BeaconBlockHeader, error) {
+func (bc *BeaconClient) GetBlockHeaderByBlockroot(ctx context.Context, blockroot phase0.Root) (*v1.BeaconBlockHeader, error) {
 	provider, isProvider := bc.clientSvc.(eth2client.BeaconBlockHeadersProvider)
 	if !isProvider {
 		return nil, fmt.Errorf("get beacon block headers not supported")
@@ -143,7 +156,7 @@ func (bc *BeaconClient) GetBlockHeaderByBlockroot(ctx context.Context, blockroot
 	return result, nil
 }
 
-func (bc *BeaconClient) GetBlockHeaderBySlot(ctx context.Context, slot uint64) (*v1.BeaconBlockHeader, error) {
+func (bc *BeaconClient) GetBlockHeaderBySlot(ctx context.Context, slot phase0.Slot) (*v1.BeaconBlockHeader, error) {
 	provider, isProvider := bc.clientSvc.(eth2client.BeaconBlockHeadersProvider)
 	if !isProvider {
 		return nil, fmt.Errorf("get beacon block headers not supported")

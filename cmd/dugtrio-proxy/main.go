@@ -9,6 +9,8 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/negroni"
 
+	"github.com/ethpandaops/dugtrio/frontend"
+	"github.com/ethpandaops/dugtrio/frontend/handlers"
 	"github.com/ethpandaops/dugtrio/pool"
 	"github.com/ethpandaops/dugtrio/proxy"
 	"github.com/ethpandaops/dugtrio/types"
@@ -41,13 +43,18 @@ func main() {
 
 func startDugtrio(config *types.Config) {
 	// init pool
-	beaconPool, err := pool.NewBeaconPool()
+	beaconPool, err := pool.NewBeaconPool(&config.Pool)
 	if err != nil {
 		logrus.Fatalf("error initializing beacon pool: %v", err)
 	}
 
 	// add endpoints to pool
-	// TODO: add endpoints
+	for _, endpoint := range config.Endpoints {
+		_, err := beaconPool.AddEndpoint(&endpoint)
+		if err != nil {
+			logrus.Errorf("error adding endpoint %v: %v", utils.GetRedactedUrl(endpoint.Url), err)
+		}
+	}
 
 	// init proxy handler
 	beaconProxy, err := proxy.NewBeaconProxy(beaconPool)
@@ -58,6 +65,22 @@ func startDugtrio(config *types.Config) {
 	// init router
 	router := mux.NewRouter()
 	router.PathPrefix("/eth/").Handler(beaconProxy)
+
+	if config.Frontend.Pprof {
+		// add pprof handler
+		router.PathPrefix("/debug/pprof/").Handler(http.DefaultServeMux)
+	}
+	if config.Frontend.Enabled {
+		fh, err := frontend.NewFrontend(&config.Frontend)
+		if err != nil {
+			logrus.Fatalf("error initializing frontend handler: %v", err)
+		}
+
+		// register frontend routes
+		router.HandleFunc("/health", handlers.Health).Methods("GET")
+
+		router.PathPrefix("/").Handler(fh)
+	}
 
 	// start http server
 	startHttpServer(&config.Server, router)

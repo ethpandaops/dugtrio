@@ -8,6 +8,8 @@ type Config struct {
 	Logging   LoggingConfig    `yaml:"logging"`
 	Endpoints []EndpointConfig `yaml:"endpoints"`
 	Server    ServerConfig     `yaml:"server"`
+	Pool      PoolConfig       `yaml:"pool"`
+	Frontend  FrontendConfig   `yaml:"frontend"`
 }
 
 type LoggingConfig struct {
@@ -33,4 +35,16 @@ type ServerConfig struct {
 	ReadTimeout  time.Duration `yaml:"readTimeout" envconfig:"SERVER_READ_TIMEOUT"`
 	WriteTimeout time.Duration `yaml:"writeTimeout" envconfig:"SERVER_WRITE_TIMEOUT"`
 	IdleTimeout  time.Duration `yaml:"idleTimeout" envconfig:"SERVER_IDLE_TIMEOUT"`
+}
+
+type PoolConfig struct {
+	FollowDistance uint64 `yaml:"followDistance" envconfig:"POOL_FOLLOW_DISTANCE"`
+}
+
+type FrontendConfig struct {
+	Enabled  bool   `yaml:"enabled" envconfig:"FRONTEND_ENABLED"`
+	Debug    bool   `yaml:"debug" envconfig:"FRONTEND_DEBUG"`
+	Pprof    bool   `yaml:"pprof" envconfig:"FRONTEND_PPROF"`
+	Minify   bool   `yaml:"minify" envconfig:"FRONTEND_MINIFY"`
+	SiteName string `yaml:"siteName" envconfig:"FRONTEND_SITE_NAME"`
 }

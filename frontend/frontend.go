@@ -1,0 +1,91 @@
+package frontend
+
+import (
+	"embed"
+	"errors"
+	"io/fs"
+	"net/http"
+	"path"
+	"strings"
+
+	"github.com/ethpandaops/dugtrio/types"
+	"github.com/sirupsen/logrus"
+)
+
+var logger = logrus.New().WithField("module", "frontend")
+var frontendConfig *types.FrontendConfig
+
+var (
+	//go:embed static/*
+	staticFiles embed.FS
+
+	//go:embed templates/*
+	templateFiles embed.FS
+)
+
+type Frontend struct {
+	handler         http.Handler
+	root            http.FileSystem
+	NotFoundHandler func(http.ResponseWriter, *http.Request)
+}
+
+func NewFrontend(config *types.FrontendConfig) (*Frontend, error) {
+	frontendConfig = config
+
+	subFs, err := fs.Sub(staticFiles, "static")
+	if err != nil {
+		return nil, err
+	}
+	fileSys := http.FS(subFs)
+	frontend := Frontend{
+		handler:         http.FileServer(fileSys),
+		root:            fileSys,
+		NotFoundHandler: HandleNotFound,
+	}
+	return &frontend, nil
+}
+
+func (frontend *Frontend) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	// basically a copy of http.FileServer and of the first lines http.serveFile functions
+	upath := r.URL.Path
+	if !strings.HasPrefix(upath, "/") {
+		upath = "/" + upath
+		r.URL.Path = upath
+	}
+	name := path.Clean(upath)
+	f, err := frontend.root.Open(name)
+	if err != nil {
+		handleHTTPError(err, frontend.NotFoundHandler, w, r)
+		return
+	}
+	defer f.Close()
+
+	_, err = f.Stat()
+	if err != nil {
+		handleHTTPError(err, frontend.NotFoundHandler, w, r)
+		return
+	}
+
+	if strings.HasSuffix(r.URL.Path, "/") {
+		handleHTTPError(fs.ErrNotExist, frontend.NotFoundHandler, w, r)
+		return
+	}
+
+	frontend.handler.ServeHTTP(w, r)
+}
+
+func handleHTTPError(err error, handler func(http.ResponseWriter, *http.Request), w http.ResponseWriter, r *http.Request) {
+	// If error is 404, use custom handler
+	if errors.Is(err, fs.ErrNotExist) {
+		handler(w, r)
+		return
+	}
+	// otherwise serve http error
+	if errors.Is(err, fs.ErrPermission) {
+		http.Error(w, "403 Forbidden", http.StatusForbidden)
+		return
+	}
+	// Default:
+	logrus.WithError(err).Errorf("page handler error")
+	http.Error(w, "500 Internal Server Error", http.StatusInternalServerError)
+}

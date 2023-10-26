@@ -20,3 +20,12 @@ endpoints:
   - name: "teku"
     url: "http://10.16.97.3:5051"
     priority: 5
+
+pool:
+  followDistance: 10
+
+frontend:
+  enabled: true # Enable or disable to web frontend
+  debug: true
+  minimize: false
+  siteName: "Dugtrio"
