@@ -12,14 +12,14 @@ import (
 	"github.com/ethpandaops/dugtrio/utils"
 )
 
-func (client *PoolClient) runUpstreamClientLoop() {
+func (client *PoolClient) runPoolClientLoop() {
 	defer utils.HandleSubroutinePanic("runUpstreamClientLoop")
 
 	for {
-		err := client.checkUpstreamClient()
+		err := client.checkPoolClient()
 
 		if err == nil {
-			err = client.runUpstreamClient()
+			err = client.runPoolClient()
 		}
 		if err == nil {
 			client.retryCounter = 0
@@ -42,7 +42,7 @@ func (client *PoolClient) runUpstreamClientLoop() {
 	}
 }
 
-func (client *PoolClient) checkUpstreamClient() error {
+func (client *PoolClient) checkPoolClient() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
@@ -55,7 +55,7 @@ func (client *PoolClient) checkUpstreamClient() error {
 	if err != nil {
 		return fmt.Errorf("error while fetching specs: %v", err)
 	}
-	err = client.blockCache.SetClientSpecs(specs)
+	err = client.beaconPool.blockCache.SetClientSpecs(specs)
 	if err != nil {
 		return fmt.Errorf("invalid node specs: %v", err)
 	}
@@ -81,7 +81,7 @@ func (client *PoolClient) checkUpstreamClient() error {
 	return nil
 }
 
-func (client *PoolClient) runUpstreamClient() error {
+func (client *PoolClient) runPoolClient() error {
 	// get latest header
 	err := client.pollClientHead()
 	if err != nil {
@@ -96,8 +96,8 @@ func (client *PoolClient) runUpstreamClient() error {
 		return fmt.Errorf("beacon node is optimistic")
 	}
 
-	specs := client.blockCache.GetSpecs()
-	finalizedEpoch, _ := client.blockCache.GetFinalizedCheckpoint()
+	specs := client.beaconPool.blockCache.GetSpecs()
+	finalizedEpoch, _ := client.beaconPool.blockCache.GetFinalizedCheckpoint()
 	if client.headSlot < phase0.Slot(finalizedEpoch)*phase0.Slot(specs.SlotsPerEpoch) {
 		return fmt.Errorf("beacon node is behind finalized checkpoint (node head: %v, finalized: %v)", client.headSlot, phase0.Slot(finalizedEpoch)*phase0.Slot(specs.SlotsPerEpoch))
 	}
@@ -148,7 +148,7 @@ func (client *PoolClient) runUpstreamClient() error {
 }
 
 func (client *PoolClient) processBlockEvent(evt *v1.BlockEvent) error {
-	currentBlock, isNewBlock := client.blockCache.AddBlock(evt.Block, evt.Slot)
+	currentBlock, isNewBlock := client.beaconPool.blockCache.AddBlock(evt.Block, evt.Slot)
 	if currentBlock != nil {
 		if isNewBlock {
 			client.logger.Infof("received block %v [0x%x] stream", currentBlock.Slot, currentBlock.Root)
@@ -175,6 +175,7 @@ func (client *PoolClient) processBlockEvent(evt *v1.BlockEvent) error {
 	client.headSlot = evt.Slot
 	client.headRoot = evt.Block
 	client.headMutex.Unlock()
+	client.beaconPool.resetHeadForkCache()
 
 	return nil
 }
@@ -208,7 +209,7 @@ func (client *PoolClient) pollClientHead() error {
 }
 
 func (client *PoolClient) setHeader(root phase0.Root, header *phase0.SignedBeaconBlockHeader) error {
-	cachedBlock, _ := client.blockCache.AddBlock(root, header.Message.Slot)
+	cachedBlock, _ := client.beaconPool.blockCache.AddBlock(root, header.Message.Slot)
 	if cachedBlock != nil {
 		cachedBlock.SetHeader(header)
 		cachedBlock.SetSeenBy(client)
@@ -223,6 +224,8 @@ func (client *PoolClient) setHeader(root phase0.Root, header *phase0.SignedBeaco
 	client.headRoot = root
 	client.headMutex.Unlock()
 
+	client.beaconPool.resetHeadForkCache()
+
 	return nil
 }
 
@@ -236,7 +239,7 @@ func (client *PoolClient) setFinalizedHead(epoch phase0.Epoch, root phase0.Root)
 	client.finalizedRoot = root
 	client.headMutex.Unlock()
 
-	client.blockCache.SetFinalizedCheckpoint(epoch, root)
+	client.beaconPool.blockCache.SetFinalizedCheckpoint(epoch, root)
 
 	return nil
 }

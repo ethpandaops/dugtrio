@@ -1,6 +1,7 @@
 package pool
 
 import (
+	"bytes"
 	"fmt"
 	"strings"
 	"sync"
@@ -110,6 +111,12 @@ func (cache *BlockCache) AddBlock(root phase0.Root, slot phase0.Slot) (*CachedBl
 	return cacheBlock, true
 }
 
+func (cache *BlockCache) GetCachedBlockByRoot(root phase0.Root) *CachedBlock {
+	cache.cacheMutex.RLock()
+	defer cache.cacheMutex.RUnlock()
+	return cache.rootMap[root]
+}
+
 func (cache *BlockCache) GetCachedBlocks() []*CachedBlock {
 	cache.cacheMutex.RLock()
 	defer cache.cacheMutex.RUnlock()
@@ -154,4 +161,37 @@ func (cache *BlockCache) cleanupCache() error {
 		delete(cache.slotMap, slot)
 	}
 	return nil
+}
+
+func (cache *BlockCache) IsCanonicalBlock(blockRoot phase0.Root, headRoot phase0.Root) bool {
+	res, _ := cache.GetBlockDistance(blockRoot, headRoot)
+	return res
+}
+
+func (cache *BlockCache) GetBlockDistance(blockRoot phase0.Root, headRoot phase0.Root) (bool, uint64) {
+	if bytes.Equal(headRoot[:], blockRoot[:]) {
+		return true, 0
+	}
+	block := cache.GetCachedBlockByRoot(blockRoot)
+	if block == nil {
+		return false, 0
+	}
+	blockSlot := block.Slot
+	headBlock := cache.GetCachedBlockByRoot(headRoot)
+	var distance uint64 = 0
+	for headBlock != nil {
+		if headBlock.Slot < blockSlot {
+			return false, 0
+		}
+		parentRoot := headBlock.GetParentRoot()
+		if parentRoot == nil {
+			return false, 0
+		}
+		distance++
+		if bytes.Equal(parentRoot[:], blockRoot[:]) {
+			return true, distance
+		}
+		headBlock = cache.GetCachedBlockByRoot(*parentRoot)
+	}
+	return false, 0
 }

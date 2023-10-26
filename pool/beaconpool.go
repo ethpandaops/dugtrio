@@ -1,11 +1,17 @@
 package pool
 
-import "github.com/ethpandaops/dugtrio/types"
+import (
+	"sync"
+
+	"github.com/ethpandaops/dugtrio/types"
+)
 
 type BeaconPool struct {
-	clientCounter uint16
-	clients       []*PoolClient
-	blockCache    *BlockCache
+	clientCounter  uint16
+	clients        []*PoolClient
+	blockCache     *BlockCache
+	forkCacheMutex sync.Mutex
+	forkCache      []*HeadFork
 }
 
 func NewBeaconPool(config *types.PoolConfig) (*BeaconPool, error) {
@@ -27,7 +33,7 @@ func (pool *BeaconPool) GetBlockCache() *BlockCache {
 func (pool *BeaconPool) AddEndpoint(endpoint *types.EndpointConfig) (*PoolClient, error) {
 	clientIdx := pool.clientCounter
 	pool.clientCounter++
-	client, err := newUpstreamClient(pool.blockCache, clientIdx, endpoint)
+	client, err := pool.newPoolClient(clientIdx, endpoint)
 	if err != nil {
 		return nil, err
 	}

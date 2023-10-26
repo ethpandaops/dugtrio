@@ -22,7 +22,7 @@ var (
 )
 
 type PoolClient struct {
-	blockCache      *BlockCache
+	beaconPool      *BeaconPool
 	clientIdx       uint16
 	endpointConfig  *types.EndpointConfig
 	clientCtx       context.Context
@@ -43,21 +43,21 @@ type PoolClient struct {
 	finalizedEpoch  phase0.Epoch
 }
 
-func newUpstreamClient(blockCache *BlockCache, clientIdx uint16, endpoint *types.EndpointConfig) (*PoolClient, error) {
+func (pool *BeaconPool) newPoolClient(clientIdx uint16, endpoint *types.EndpointConfig) (*PoolClient, error) {
 	rpcClient, err := rpc.NewBeaconClient(endpoint)
 	if err != nil {
 		return nil, err
 	}
 
 	client := PoolClient{
-		blockCache:     blockCache,
+		beaconPool:     pool,
 		clientIdx:      clientIdx,
 		endpointConfig: endpoint,
 		rpcClient:      rpcClient,
 		logger:         logrus.WithField("client", endpoint.Name),
 	}
 	client.resetContext()
-	go client.runUpstreamClientLoop()
+	go client.runPoolClientLoop()
 	return &client, nil
 }
 

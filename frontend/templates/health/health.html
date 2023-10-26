@@ -1,7 +1,6 @@
 {{ define "page" }}
   <div class="container mt-2">
 
-
     <div class="card mt-2">
       <div class="card-body px-0 py-3">
         <h2>Clients</h2>
@@ -14,6 +13,7 @@
                 <th>Head Slot</th>
                 <th>Head Root</th>
                 <th>Status</th>
+                <th>Useable</th>
                 <th>Version</th>
               </tr>
             </thead>
@@ -33,11 +33,18 @@
                       {{ else if eq $client.Status "synchronizing" }}
                         <span class="badge rounded-pill text-bg-warning" data-bs-toggle="tooltip" data-bs-placement="top" title="Updated: {{ formatTimeDiff $client.LastRefresh }}">Synchronizing</span>
                       {{ else if eq $client.Status "optimistic" }}
-                        <span class="badge rounded-pill text-bg-info" data-bs-toggle="tooltip" data-bs-placement="top" title="Updated: {{ formatTimeDiff $client.LastRefresh }}">Optimistic</span>
+                        <span class="badge rounded-pill text-bg-warning" data-bs-toggle="tooltip" data-bs-placement="top" title="Updated: {{ formatTimeDiff $client.LastRefresh }}">Optimistic</span>
                       {{ else if eq $client.Status "offline" }}
-                        <span class="badge rounded-pill text-bg-danger" data-bs-toggle="tooltip" data-bs-placement="top" title="Updated: {{ formatTimeDiff $client.LastRefresh }}, Error: {{ $client.LastError }}">Disconnected</span>
+                        <span class="badge rounded-pill text-bg-danger" data-bs-toggle="tooltip" data-bs-placement="top" title="Updated: {{ formatTimeDiff $client.LastRefresh }}, Error: {{ $client.LastError }}">Offline</span>
                       {{ else }}
                         <span class="badge rounded-pill text-bg-dark">{{ $client.Status }}</span>
+                      {{ end }}
+                    </td>
+                    <td>
+                      {{ if .IsReady }}
+                        <span class="badge rounded-pill text-bg-success">yes</span>
+                      {{ else }}
+                        <span class="badge rounded-pill text-bg-danger">no</span>
                       {{ end }}
                     </td>
                     <td>
@@ -80,11 +87,87 @@
           </table>
         </div>
       </div>
+    </div>
+    <div id="footer-placeholder" style="height:30px;"></div>
+
+    <div class="card mt-2">
+      <div class="card-body px-0 py-3">
+        <div class="table-responsive px-0 py-1">
+          <table class="table table-nobr" id="forks">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Head Slot</th>
+                <th>Head Root</th>
+                <th>Client</th>
+                <th>Status</th>
+                <th>Distance</th>
+              </tr>
+            </thead>
+              <tbody>
+                {{ range $i, $fork := .Forks }}
+                  <tr>
+                    <td rowspan="{{ $fork.ClientCount }}">
+                      {{ if eq $i 0 }}
+                        <span class="badge rounded-pill text-bg-success">Canonical</span>
+                      {{ else }}
+                        <span class="badge rounded-pill text-bg-warning">Fork #{{ $i }}</span>
+                      {{ end }}
+                    </td>
+                    <td rowspan="{{ $fork.ClientCount }}">{{ $fork.HeadSlot }}</td>
+                    <td rowspan="{{ $fork.ClientCount }}">
+                      <span class="text-truncate d-inline-block" style="max-width: 200px">0x{{ printf "%x" $fork.HeadRoot }}</span>
+                      <i class="fa fa-copy text-muted p-1" role="button" data-bs-toggle="tooltip" title="Copy to clipboard" data-clipboard-text="0x{{ printf "%x" $fork.HeadRoot }}"></i>
+                    </td>
+                    {{ range $i, $client := $fork.Clients }}
+                      {{- if eq $i 0 -}}
+                        {{ template "fork_client_cols" $client }}
+                      {{- end -}}
+                    {{ end }}
+                  </tr>
+                  {{ range $i, $client := $fork.Clients }}
+                    {{- if not (eq $i 0) -}}
+                      <tr>
+                        {{ template "fork_client_cols" $client }}
+                      </tr>
+                    {{- end -}}
+                  {{ end }}
+                {{ end }}
+              </tbody>
+          </table>
+        </div>
+      </div>
       <div id="footer-placeholder" style="height:30px;"></div>
     </div>
 
   </div>
 {{ end }}
+
+{{ define "fork_client_cols" }}
+  <td>{{ .Client.Name }}</td>
+  <td>
+    {{ if eq .Client.Status "online" }}
+      <span class="badge rounded-pill text-bg-success">Online</span>
+    {{ else if eq .Client.Status "synchronizing" }}
+      <span class="badge rounded-pill text-bg-warning" data-bs-toggle="tooltip" data-bs-placement="top" title="Updated: {{ formatTimeDiff .Client.LastRefresh }}">Synchronizing</span>
+    {{ else if eq .Client.Status "optimistic" }}
+      <span class="badge rounded-pill text-bg-warning" data-bs-toggle="tooltip" data-bs-placement="top" title="Updated: {{ formatTimeDiff .Client.LastRefresh }}">Optimistic</span>
+    {{ else if eq .Client.Status "offline" }}
+      <span class="badge rounded-pill text-bg-danger" data-bs-toggle="tooltip" data-bs-placement="top" title="Updated: {{ formatTimeDiff .Client.LastRefresh }}, Error: {{ .Client.LastError }}">Offline</span>
+    {{ else }}
+      <span class="badge rounded-pill text-bg-dark">{{ .Client.Status }}</span>
+    {{ end }}
+  </td>
+  <td>
+    {{ if eq .Distance 0 }}
+      <span class="badge rounded-pill text-bg-success">{{ .Distance }} blocks</span>
+    {{ else }}
+      <span class="badge rounded-pill text-bg-warning" data-bs-toggle="tooltip" data-bs-placement="top" data-bs-title="head slot {{ .Client.HeadSlot }}">{{ .Distance }} blocks</span>
+    {{ end }}
+  </td>
+{{ end }}
+
+
 {{ define "js" }}
 {{ end }}
 {{ define "css" }}

@@ -35,6 +35,13 @@ func (block *CachedBlock) GetHeader() *phase0.SignedBeaconBlockHeader {
 	return block.header
 }
 
+func (block *CachedBlock) GetParentRoot() *phase0.Root {
+	if block.header == nil {
+		return nil
+	}
+	return &block.header.Message.ParentRoot
+}
+
 func (block *CachedBlock) SetHeader(header *phase0.SignedBeaconBlockHeader) {
 	block.header = header
 }
