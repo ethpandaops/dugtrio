@@ -45,8 +45,9 @@ type PoolConfig struct {
 }
 
 type ProxyConfig struct {
-	BlockedPathsStr string   `envconfig:"PROXY_BLOCKED_PATHS"`
-	BlockedPaths    []string `yaml:"blockedPaths"`
+	CallTimeout     time.Duration `yaml:"callTimeout" envconfig:"PROXY_CALL_TIMEOUT"`
+	BlockedPathsStr string        `envconfig:"PROXY_BLOCKED_PATHS"`
+	BlockedPaths    []string      `yaml:"blockedPaths"`
 }
 
 type FrontendConfig struct {

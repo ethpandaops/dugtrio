@@ -73,6 +73,10 @@ func NewBeaconProxy(config *types.ProxyConfig, pool *pool.BeaconPool) (*BeaconPr
 		proxy.blockedPaths = append(proxy.blockedPaths, *blockedPathPattern)
 	}
 
+	if config.CallTimeout == 0 {
+		config.CallTimeout = 60 * time.Second
+	}
+
 	return &proxy, nil
 }
 
@@ -144,7 +148,7 @@ func (proxy *BeaconProxy) processProxyCall(w http.ResponseWriter, r *http.Reques
 		Close:         r.Close,
 	}
 
-	client := &http.Client{Timeout: time.Second * 60}
+	client := &http.Client{Timeout: proxy.config.CallTimeout}
 	resp, err := client.Do(&rr)
 	if err != nil {
 		return fmt.Errorf("proxy request error: %w", err)

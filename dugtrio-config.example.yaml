@@ -22,6 +22,7 @@ endpoints:
     priority: 5
 
 pool:
+  callTimeout: 60s
   followDistance: 10
   maxHeadDistance: 2
 
