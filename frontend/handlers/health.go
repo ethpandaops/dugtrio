@@ -11,6 +11,9 @@ import (
 type HealthPage struct {
 	Clients     []*HealthPageClient `json:"clients"`
 	ClientCount uint64              `json:"client_count"`
+
+	Blocks     []*HealthPageBlock `json:"blocks"`
+	BlockCount uint64             `json:"block_count"`
 }
 
 type HealthPageClient struct {
@@ -22,6 +25,12 @@ type HealthPageClient struct {
 	Status      string    `json:"status"`
 	LastRefresh time.Time `json:"refresh"`
 	LastError   string    `json:"error"`
+}
+
+type HealthPageBlock struct {
+	Slot   uint64   `json:"slot"`
+	Root   []byte   `json:"root"`
+	SeenBy []string `json:"seen_by"`
 }
 
 // Health will return the "health" page using a go template
@@ -50,6 +59,7 @@ func (fh *FrontendHandler) getHealthPageData() (*HealthPage, error) {
 		Clients: []*HealthPageClient{},
 	}
 
+	// get clients
 	for _, client := range fh.pool.GetAllEndpoints() {
 		headSlot, headRoot := client.GetLastHead()
 		clientData := &HealthPageClient{
@@ -76,6 +86,22 @@ func (fh *FrontendHandler) getHealthPageData() (*HealthPage, error) {
 		pageData.Clients = append(pageData.Clients, clientData)
 	}
 	pageData.ClientCount = uint64(len(pageData.Clients))
+
+	// get blocks
+	for _, block := range fh.pool.GetBlockCache().GetCachedBlocks() {
+
+		blockData := &HealthPageBlock{
+			Slot:   uint64(block.Slot),
+			Root:   block.Root[:],
+			SeenBy: []string{},
+		}
+		for _, client := range block.GetSeenBy() {
+			blockData.SeenBy = append(blockData.SeenBy, client.GetName())
+		}
+
+		pageData.Blocks = append(pageData.Blocks, blockData)
+	}
+	pageData.BlockCount = uint64(len(pageData.Blocks))
 
 	return pageData, nil
 }

@@ -172,7 +172,7 @@ func (client *PoolClient) processBlockEvent(evt *v1.BlockEvent) error {
 	client.headSlot = evt.Slot
 	client.headRoot = evt.Block
 	client.headMutex.Unlock()
-	currentBlock.SetSeenBy(client.clientIdx)
+	currentBlock.SetSeenBy(client)
 
 	return nil
 }
@@ -209,7 +209,7 @@ func (client *PoolClient) setHeader(root phase0.Root, header *phase0.SignedBeaco
 	cachedBlock, _ := client.blockCache.AddBlock(root, header.Message.Slot)
 	if cachedBlock != nil {
 		cachedBlock.SetHeader(header)
-		cachedBlock.SetSeenBy(client.clientIdx)
+		cachedBlock.SetSeenBy(client)
 	}
 
 	client.headMutex.Lock()

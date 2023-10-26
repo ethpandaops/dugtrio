@@ -80,7 +80,7 @@ func (client *PoolClient) GetVersion() string {
 	return client.versionStr
 }
 
-func (client *PoolClient) GetEndpoint() *types.EndpointConfig {
+func (client *PoolClient) GetEndpointConfig() *types.EndpointConfig {
 	return client.endpointConfig
 }
 

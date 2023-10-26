@@ -20,6 +20,10 @@ func NewBeaconPool(config *types.PoolConfig) (*BeaconPool, error) {
 	return &pool, nil
 }
 
+func (pool *BeaconPool) GetBlockCache() *BlockCache {
+	return pool.blockCache
+}
+
 func (pool *BeaconPool) AddEndpoint(endpoint *types.EndpointConfig) (*PoolClient, error) {
 	clientIdx := pool.clientCounter
 	pool.clientCounter++

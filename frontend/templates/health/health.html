@@ -4,7 +4,7 @@
 
     <div class="card mt-2">
       <div class="card-body px-0 py-3">
-        <h1>Clients</h1>
+        <h2>Clients</h2>
         <div class="table-responsive px-0 py-1">
           <table class="table table-nobr" id="clients">
             <thead>
@@ -22,9 +22,9 @@
                   <tr>
                     <td>{{ $client.Index }}</td>
                     <td>{{ $client.Name }}</td>
-                    <td><a href="/slot/{{ $client.HeadSlot }}">{{ $client.HeadSlot }}</a></td>
+                    <td>{{ $client.HeadSlot }}</td>
                     <td>
-                      <a href="/slot/0x{{ printf "%x" $client.HeadRoot }}" class="text-truncate d-inline-block" style="max-width: 200px">0x{{ printf "%x" $client.HeadRoot }}</a>
+                      <span class="text-truncate d-inline-block" style="max-width: 200px">0x{{ printf "%x" $client.HeadRoot }}</span>
                       <i class="fa fa-copy text-muted p-1" role="button" data-bs-toggle="tooltip" title="Copy to clipboard" data-clipboard-text="0x{{ printf "%x" $client.HeadRoot }}"></i>
                     </td>
                     <td>
@@ -43,6 +43,36 @@
                     <td>
                       <span class="text-truncate d-inline-block" style="max-width: 400px">{{ $client.Version }}</span>
                       <i class="fa fa-copy text-muted p-1" role="button" data-bs-toggle="tooltip" title="Copy to clipboard" data-clipboard-text="{{ $client.Version }}"></i>
+                    </td>
+                  </tr>
+                {{ end }}
+              </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <div id="footer-placeholder" style="height:30px;"></div>
+    <div class="card mt-2">
+      <div class="card-body px-0 py-3">
+        <h2>Cached Block Headers</h2>
+        <div class="table-responsive px-0 py-1">
+          <table class="table table-nobr" id="blocks">
+            <thead>
+              <tr>
+                <th>Slot</th>
+                <th>Root</th>
+                <th>Seen By</th>
+              </tr>
+            </thead>
+              <tbody>
+                {{ range $i, $block := .Blocks }}
+                  <tr>
+                    <td>{{ $block.Slot }}</td>
+                    <td>0x{{ printf "%x" $block.Root }}</td>
+                    <td>
+                      {{ range $j, $cli := .SeenBy }}
+                        {{- if not (eq $j 0) }}, {{end}}{{ $cli -}}
+                      {{ end }}
                     </td>
                   </tr>
                 {{ end }}

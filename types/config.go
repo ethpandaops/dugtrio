@@ -4,12 +4,12 @@ import "time"
 
 // Config is a struct to hold the configuration data
 type Config struct {
-	Debug     bool             `yaml:"debug" envconfig:"DUGTRIO_DEBUG"`
-	Logging   LoggingConfig    `yaml:"logging"`
-	Endpoints []EndpointConfig `yaml:"endpoints"`
-	Server    ServerConfig     `yaml:"server"`
-	Pool      PoolConfig       `yaml:"pool"`
-	Frontend  FrontendConfig   `yaml:"frontend"`
+	Debug     bool              `yaml:"debug" envconfig:"DUGTRIO_DEBUG"`
+	Logging   *LoggingConfig    `yaml:"logging"`
+	Endpoints []*EndpointConfig `yaml:"endpoints"`
+	Server    *ServerConfig     `yaml:"server"`
+	Pool      *PoolConfig       `yaml:"pool"`
+	Frontend  *FrontendConfig   `yaml:"frontend"`
 }
 
 type LoggingConfig struct {

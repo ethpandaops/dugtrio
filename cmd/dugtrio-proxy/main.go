@@ -26,7 +26,7 @@ func main() {
 	if err != nil {
 		logrus.Fatalf("error reading config file: %v", err)
 	}
-	logWriter := utils.InitLogger(&config.Logging)
+	logWriter := utils.InitLogger(config.Logging)
 	defer logWriter.Dispose()
 
 	logrus.WithFields(logrus.Fields{
@@ -43,14 +43,14 @@ func main() {
 
 func startDugtrio(config *types.Config) {
 	// init pool
-	beaconPool, err := pool.NewBeaconPool(&config.Pool)
+	beaconPool, err := pool.NewBeaconPool(config.Pool)
 	if err != nil {
 		logrus.Fatalf("error initializing beacon pool: %v", err)
 	}
 
 	// add endpoints to pool
 	for _, endpoint := range config.Endpoints {
-		_, err := beaconPool.AddEndpoint(&endpoint)
+		_, err := beaconPool.AddEndpoint(endpoint)
 		if err != nil {
 			logrus.Errorf("error adding endpoint %v: %v", utils.GetRedactedUrl(endpoint.Url), err)
 		}
@@ -71,7 +71,7 @@ func startDugtrio(config *types.Config) {
 		router.PathPrefix("/debug/pprof/").Handler(http.DefaultServeMux)
 	}
 	if config.Frontend.Enabled {
-		frontend, err := frontend.NewFrontend(&config.Frontend)
+		frontend, err := frontend.NewFrontend(config.Frontend)
 		if err != nil {
 			logrus.Fatalf("error initializing frontend: %v", err)
 		}
@@ -84,7 +84,7 @@ func startDugtrio(config *types.Config) {
 	}
 
 	// start http server
-	startHttpServer(&config.Server, router)
+	startHttpServer(config.Server, router)
 }
 
 func startHttpServer(config *types.ServerConfig, router *mux.Router) {

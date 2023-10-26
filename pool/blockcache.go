@@ -4,11 +4,13 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/mashingan/smapping"
 
 	"github.com/ethpandaops/dugtrio/types"
+	"github.com/ethpandaops/dugtrio/utils"
 )
 
 type BlockCache struct {
@@ -34,6 +36,7 @@ func NewBlockCache(followDistance uint64) (*BlockCache, error) {
 		slotMap:        make(map[phase0.Slot][]*CachedBlock),
 		rootMap:        make(map[phase0.Root]*CachedBlock),
 	}
+	go cache.runCacheCleanup()
 	return &cache, nil
 }
 
@@ -93,7 +96,7 @@ func (cache *BlockCache) AddBlock(root phase0.Root, slot phase0.Slot) (*CachedBl
 	cacheBlock := &CachedBlock{
 		Root:    root,
 		Slot:    slot,
-		seenMap: make(map[uint16]bool),
+		seenMap: make(map[uint16]*PoolClient),
 	}
 	cache.rootMap[root] = cacheBlock
 	if cache.slotMap[slot] == nil {
@@ -105,4 +108,50 @@ func (cache *BlockCache) AddBlock(root phase0.Root, slot phase0.Slot) (*CachedBl
 		cache.maxSlotIdx = int64(slot)
 	}
 	return cacheBlock, true
+}
+
+func (cache *BlockCache) GetCachedBlocks() []*CachedBlock {
+	cache.cacheMutex.RLock()
+	defer cache.cacheMutex.RUnlock()
+
+	blocks := []*CachedBlock{}
+	for slot := cache.maxSlotIdx; slot >= cache.maxSlotIdx-int64(cache.followDistance); slot-- {
+		if slot < 0 {
+			break
+		}
+		for _, block := range cache.slotMap[phase0.Slot(slot)] {
+			blocks = append(blocks, block)
+		}
+	}
+	return blocks
+}
+
+func (cache *BlockCache) runCacheCleanup() {
+	defer utils.HandleSubroutinePanic("pool.blockcache.cleanup")
+
+	for {
+		time.Sleep(30 * time.Second)
+
+	}
+}
+
+func (cache *BlockCache) cleanupCache() error {
+	cache.cacheMutex.Lock()
+	defer cache.cacheMutex.Unlock()
+
+	minSlot := cache.maxSlotIdx - int64(cache.followDistance)
+	if minSlot <= 0 {
+		return nil
+	}
+	for slot, blocks := range cache.slotMap {
+		if slot >= phase0.Slot(minSlot) {
+			continue
+		}
+
+		for _, block := range blocks {
+			delete(cache.rootMap, block.Root)
+		}
+		delete(cache.slotMap, slot)
+	}
+	return nil
 }
