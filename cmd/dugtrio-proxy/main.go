@@ -57,7 +57,7 @@ func startDugtrio(config *types.Config) {
 	}
 
 	// init proxy handler
-	beaconProxy, err := proxy.NewBeaconProxy(beaconPool)
+	beaconProxy, err := proxy.NewBeaconProxy(config.Proxy, beaconPool)
 	if err != nil {
 		logrus.Fatalf("error initializing beacon proxy: %v", err)
 	}

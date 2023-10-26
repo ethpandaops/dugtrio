@@ -23,6 +23,7 @@ endpoints:
 
 pool:
   followDistance: 10
+  maxHeadDistance: 2
 
 frontend:
   enabled: true # Enable or disable to web frontend

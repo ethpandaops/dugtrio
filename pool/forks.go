@@ -73,7 +73,7 @@ func (pool *BeaconPool) GetHeadForks() []*HeadFork {
 			if !bytes.Equal(fork.Root[:], cHeadRoot[:]) {
 				_, headDistance = pool.blockCache.GetBlockDistance(cHeadRoot, fork.Root)
 			}
-			if headDistance < 2 {
+			if headDistance <= pool.config.MaxHeadDistance {
 				fork.ReadyClients = append(fork.ReadyClients, client)
 			}
 		}

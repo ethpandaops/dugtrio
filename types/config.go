@@ -9,6 +9,7 @@ type Config struct {
 	Endpoints []*EndpointConfig `yaml:"endpoints"`
 	Server    *ServerConfig     `yaml:"server"`
 	Pool      *PoolConfig       `yaml:"pool"`
+	Proxy     *ProxyConfig      `yaml:"proxy"`
 	Frontend  *FrontendConfig   `yaml:"frontend"`
 }
 
@@ -38,7 +39,12 @@ type ServerConfig struct {
 }
 
 type PoolConfig struct {
-	FollowDistance uint64 `yaml:"followDistance" envconfig:"POOL_FOLLOW_DISTANCE"`
+	FollowDistance  uint64 `yaml:"followDistance" envconfig:"POOL_FOLLOW_DISTANCE"`
+	MaxHeadDistance uint64 `yaml:"maxHeadDistance" envconfig:"POOL_MAX_HEAD_DISTANCE"`
+	SchedulerMode   string `yaml:"schedulerMode" envconfig:"POOL_SCHEDULER_MODE"`
+}
+
+type ProxyConfig struct {
 }
 
 type FrontendConfig struct {
