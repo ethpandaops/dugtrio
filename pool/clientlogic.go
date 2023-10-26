@@ -149,30 +149,32 @@ func (client *PoolClient) runUpstreamClient() error {
 
 func (client *PoolClient) processBlockEvent(evt *v1.BlockEvent) error {
 	currentBlock, isNewBlock := client.blockCache.AddBlock(evt.Block, evt.Slot)
-	if isNewBlock {
-		client.logger.Infof("received block %v [0x%x] stream", currentBlock.Slot, currentBlock.Root)
-	} else {
-		client.logger.Debugf("received known block %v [0x%x] stream", currentBlock.Slot, currentBlock.Root)
-	}
-
-	err := currentBlock.EnsureHeader(func() (*phase0.SignedBeaconBlockHeader, error) {
-		ctx, cancel := context.WithTimeout(client.clientCtx, 10*time.Second)
-		defer cancel()
-		header, err := client.rpcClient.GetBlockHeaderByBlockroot(ctx, currentBlock.Root)
-		if err != nil {
-			return nil, err
+	if currentBlock != nil {
+		if isNewBlock {
+			client.logger.Infof("received block %v [0x%x] stream", currentBlock.Slot, currentBlock.Root)
+		} else {
+			client.logger.Debugf("received known block %v [0x%x] stream", currentBlock.Slot, currentBlock.Root)
 		}
-		return header.Header, nil
-	})
-	if err != nil {
-		return err
+
+		err := currentBlock.EnsureHeader(func() (*phase0.SignedBeaconBlockHeader, error) {
+			ctx, cancel := context.WithTimeout(client.clientCtx, 10*time.Second)
+			defer cancel()
+			header, err := client.rpcClient.GetBlockHeaderByBlockroot(ctx, currentBlock.Root)
+			if err != nil {
+				return nil, err
+			}
+			return header.Header, nil
+		})
+		if err != nil {
+			return err
+		}
+		currentBlock.SetSeenBy(client)
 	}
 
 	client.headMutex.Lock()
 	client.headSlot = evt.Slot
 	client.headRoot = evt.Block
 	client.headMutex.Unlock()
-	currentBlock.SetSeenBy(client)
 
 	return nil
 }
