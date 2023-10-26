@@ -45,7 +45,11 @@ type PoolConfig struct {
 }
 
 type ProxyConfig struct {
+	ProxyCount      uint64        `yaml:"proxyCount" envconfig:"PROXY_PROXY_COUNT"`
 	CallTimeout     time.Duration `yaml:"callTimeout" envconfig:"PROXY_CALL_TIMEOUT"`
+	SessionTimeout  time.Duration `yaml:"sessionTimeout" envconfig:"PROXY_SESSION_TIMEOUT"`
+	CallRateLimit   uint64        `yaml:"callRateLimit" envconfig:"PROXY_CALL_RATE_LIMIT"`
+	CallRateBurst   uint64        `yaml:"callRateBurst" envconfig:"PROXY_CALL_RATE_BURST"`
 	BlockedPathsStr string        `envconfig:"PROXY_BLOCKED_PATHS"`
 	BlockedPaths    []string      `yaml:"blockedPaths"`
 }

@@ -6,28 +6,51 @@ logging:
 
 # HTTP Server configuration
 server:
-  host: "localhost" # Address to listen on
-  port: "8080" # Port to listen on
+  # Address to listen on
+  host: "localhost"
 
+  # Port to listen on
+  port: "8080" 
+
+# Beacon Node Endpoints
 endpoints:
   - name: "pk01"
     url: "http://10.16.71.108:5052"
-    priority: 4
-    archive: true
   - name: "lh"
     url: "http://10.16.97.2:5052"
-    priority: 5
   - name: "teku"
     url: "http://10.16.97.3:5051"
-    priority: 5
 
+# Pool configuration
 pool:
-  callTimeout: 60s
+  schedulerMode: "rr"
   followDistance: 10
   maxHeadDistance: 2
 
+# Proxy configuration
+proxy:
+  # number of proxies in front of dugtrio
+  proxyCount: 0
+
+  # proxy call timeout
+  callTimeout: 60s
+
+  # proxy session timeout
+  sessionTimeout: 10m
+
+  # call rate limit (calls per second)
+  callRateLimit: 100
+
+  # call rate burst limit
+  callRateBurst: 1000
+
+  # blocked api paths (regex patterns)
+  blockedPaths:
+    - ^/eth/v[0-9]+/debug/.*
+
+# Frontend configuration
 frontend:
-  enabled: true # Enable or disable to web frontend
-  debug: true
-  minify: false
+  # Enable or disable to web frontend
+  enabled: true
+  minify: true
   siteName: "Dugtrio"

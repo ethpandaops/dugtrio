@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/ethpandaops/dugtrio/pool"
@@ -39,18 +40,22 @@ var passthruResponseHeaderKeys = [...]string{
 }
 
 type BeaconProxy struct {
-	config       *types.ProxyConfig
+	Config       *types.ProxyConfig
 	pool         *pool.BeaconPool
 	logger       *logrus.Entry
 	blockedPaths []regexp.Regexp
+
+	sessionMutex sync.Mutex
+	sessions     map[string]*ProxySession
 }
 
 func NewBeaconProxy(config *types.ProxyConfig, pool *pool.BeaconPool) (*BeaconProxy, error) {
 	proxy := BeaconProxy{
-		config:       config,
+		Config:       config,
 		pool:         pool,
 		logger:       logrus.WithField("module", "proxy"),
 		blockedPaths: []regexp.Regexp{},
+		sessions:     map[string]*ProxySession{},
 	}
 
 	blockedPaths := []string{}
@@ -76,7 +81,11 @@ func NewBeaconProxy(config *types.ProxyConfig, pool *pool.BeaconPool) (*BeaconPr
 	if config.CallTimeout == 0 {
 		config.CallTimeout = 60 * time.Second
 	}
+	if config.SessionTimeout == 0 {
+		config.SessionTimeout = 10 * time.Minute
+	}
 
+	go proxy.cleanupSessions()
 	return &proxy, nil
 }
 
@@ -85,6 +94,14 @@ func (proxy *BeaconProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
 		w.WriteHeader(http.StatusForbidden)
 		w.Write([]byte("Path Blocked"))
+		return
+	}
+
+	session := proxy.getSessionForRequest(r)
+	if session.checkCallLimit(1) != nil {
+		w.Header().Set("Content-Type", "text/html")
+		w.WriteHeader(http.StatusTooManyRequests)
+		w.Write([]byte("Call Limit exceeded"))
 		return
 	}
 
@@ -148,7 +165,7 @@ func (proxy *BeaconProxy) processProxyCall(w http.ResponseWriter, r *http.Reques
 		Close:         r.Close,
 	}
 
-	client := &http.Client{Timeout: proxy.config.CallTimeout}
+	client := &http.Client{Timeout: proxy.Config.CallTimeout}
 	resp, err := client.Do(&rr)
 	if err != nil {
 		return fmt.Errorf("proxy request error: %w", err)
