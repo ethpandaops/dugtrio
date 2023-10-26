@@ -3,12 +3,14 @@ package pool
 import (
 	"bytes"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/mashingan/smapping"
+	"github.com/sirupsen/logrus"
 
 	"github.com/ethpandaops/dugtrio/types"
 	"github.com/ethpandaops/dugtrio/utils"
@@ -122,11 +124,16 @@ func (cache *BlockCache) GetCachedBlocks() []*CachedBlock {
 	defer cache.cacheMutex.RUnlock()
 
 	blocks := []*CachedBlock{}
-	for slot := cache.maxSlotIdx; slot >= cache.maxSlotIdx-int64(cache.followDistance); slot-- {
-		if slot < 0 {
-			break
-		}
-		for _, block := range cache.slotMap[phase0.Slot(slot)] {
+	slots := []phase0.Slot{}
+	for slot := range cache.slotMap {
+		slots = append(slots, slot)
+	}
+	sort.Slice(slots, func(a, b int) bool {
+		return slots[a] > slots[b]
+	})
+
+	for _, slot := range slots {
+		for _, block := range cache.slotMap[slot] {
 			blocks = append(blocks, block)
 		}
 	}
@@ -139,6 +146,10 @@ func (cache *BlockCache) runCacheCleanup() {
 	for {
 		time.Sleep(30 * time.Second)
 
+		err := cache.cleanupCache()
+		if err != nil {
+			logrus.Errorf("error during cache cleanup: %v", err)
+		}
 	}
 }
 
