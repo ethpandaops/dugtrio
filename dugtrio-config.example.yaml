@@ -29,5 +29,5 @@ pool:
 frontend:
   enabled: true # Enable or disable to web frontend
   debug: true
-  minimize: false
+  minify: false
   siteName: "Dugtrio"

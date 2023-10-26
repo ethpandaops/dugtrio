@@ -17,6 +17,7 @@ import (
 	"github.com/ethpandaops/dugtrio/utils"
 )
 
+var templateFiles fs.FS
 var templateCache = make(map[string]*template.Template)
 var templateCacheMux = &sync.RWMutex{}
 var templateFuncs = utils.GetTemplateFuncs()

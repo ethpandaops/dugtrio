@@ -3,7 +3,6 @@
   window.addEventListener('DOMContentLoaded', function() {
     initControls();
     window.setInterval(updateTimers, 1000);
-    initHeaderSearch();
   });
   var tooltipDict = {};
   var tooltipIdx = 1;

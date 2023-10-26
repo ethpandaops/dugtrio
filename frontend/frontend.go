@@ -17,10 +17,10 @@ var frontendConfig *types.FrontendConfig
 
 var (
 	//go:embed static/*
-	staticFiles embed.FS
+	staticEmbedFS embed.FS
 
 	//go:embed templates/*
-	templateFiles embed.FS
+	templateEmbedFS embed.FS
 )
 
 type Frontend struct {
@@ -32,11 +32,17 @@ type Frontend struct {
 func NewFrontend(config *types.FrontendConfig) (*Frontend, error) {
 	frontendConfig = config
 
-	subFs, err := fs.Sub(staticFiles, "static")
+	subFs, err := fs.Sub(staticEmbedFS, "static")
 	if err != nil {
 		return nil, err
 	}
 	fileSys := http.FS(subFs)
+
+	templateFiles, err = fs.Sub(templateEmbedFS, "templates")
+	if err != nil {
+		return nil, err
+	}
+
 	frontend := Frontend{
 		defaultHandler:  http.FileServer(fileSys),
 		rootFileSys:     fileSys,
