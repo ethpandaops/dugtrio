@@ -1,6 +1,7 @@
 package pool
 
 import (
+	"sort"
 	"sync"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -22,6 +23,9 @@ func (block *CachedBlock) GetSeenBy() []*PoolClient {
 	for _, client := range block.seenMap {
 		clients = append(clients, client)
 	}
+	sort.Slice(clients, func(a, b int) bool {
+		return clients[a].clientIdx < clients[b].clientIdx
+	})
 	return clients
 }
 

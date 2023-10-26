@@ -5,6 +5,8 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"regexp"
+	"strings"
 	"time"
 
 	"github.com/ethpandaops/dugtrio/pool"
@@ -37,23 +39,51 @@ var passthruResponseHeaderKeys = [...]string{
 }
 
 type BeaconProxy struct {
-	config *types.ProxyConfig
-	pool   *pool.BeaconPool
-	logger *logrus.Entry
+	config       *types.ProxyConfig
+	pool         *pool.BeaconPool
+	logger       *logrus.Entry
+	blockedPaths []regexp.Regexp
 }
 
 func NewBeaconProxy(config *types.ProxyConfig, pool *pool.BeaconPool) (*BeaconProxy, error) {
 	proxy := BeaconProxy{
-		config: config,
-		pool:   pool,
-		logger: logrus.WithField("module", "proxy"),
+		config:       config,
+		pool:         pool,
+		logger:       logrus.WithField("module", "proxy"),
+		blockedPaths: []regexp.Regexp{},
 	}
+
+	blockedPaths := []string{}
+	for _, blockedPath := range config.BlockedPaths {
+		blockedPaths = append(blockedPaths, blockedPath)
+	}
+	for _, blockedPath := range strings.Split(config.BlockedPathsStr, ",") {
+		blockedPath = strings.Trim(blockedPath, " ")
+		if blockedPath == "" {
+			continue
+		}
+		blockedPaths = append(blockedPaths, blockedPath)
+	}
+	for _, blockedPath := range blockedPaths {
+		blockedPathPattern, err := regexp.Compile(blockedPath)
+		if err != nil {
+			proxy.logger.Errorf("error parsing blocked path pattern '%v': %v", blockedPath, err)
+			continue
+		}
+		proxy.blockedPaths = append(proxy.blockedPaths, *blockedPathPattern)
+	}
+
 	return &proxy, nil
 }
 
 func (proxy *BeaconProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if proxy.checkBlockedPaths(r.URL) {
+		w.Header().Set("Content-Type", "text/html")
+		w.WriteHeader(http.StatusForbidden)
+		w.Write([]byte("Path Blocked"))
+		return
+	}
 
-	// TODO: serve proxy call
 	endpoint := proxy.pool.GetReadyEndpoint()
 	err := proxy.processProxyCall(w, r, endpoint)
 
@@ -66,7 +96,18 @@ func (proxy *BeaconProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			"method":   r.Method,
 			"url":      utils.GetRedactedUrl(r.URL.String()),
 		}).Warnf("proxy error %v", err)
+		w.Write([]byte("Internal Server Error"))
 	}
+}
+
+func (proxy *BeaconProxy) checkBlockedPaths(url *url.URL) bool {
+	for _, blockedPathPattern := range proxy.blockedPaths {
+		match := blockedPathPattern.MatchString(url.EscapedPath())
+		if match {
+			return true
+		}
+	}
+	return false
 }
 
 func (proxy *BeaconProxy) processProxyCall(w http.ResponseWriter, r *http.Request, endpoint *pool.PoolClient) error {
@@ -103,7 +144,7 @@ func (proxy *BeaconProxy) processProxyCall(w http.ResponseWriter, r *http.Reques
 		Close:         r.Close,
 	}
 
-	client := &http.Client{Timeout: time.Second * 300}
+	client := &http.Client{Timeout: time.Second * 60}
 	resp, err := client.Do(&rr)
 	if err != nil {
 		return fmt.Errorf("proxy request error: %w", err)

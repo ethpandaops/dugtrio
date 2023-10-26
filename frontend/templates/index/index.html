@@ -1,0 +1,43 @@
+{{ define "page" }}
+  <div class="container mt-2">
+    <h2 class="py-2">Dugtrio Beacon Node API Proxy</h2>
+    <div class="row">
+      <div class="col-12 my-4">
+        This is a load-balancing proxy for the ethereum beacon chain <a href="https://ethereum.github.io/beacon-APIs/">RPC API</a>.
+      </div>
+    </div>
+    <div class="row">
+      <div class="col-6 col-sm-4 col-lg-3">
+        Proxy Status:
+      </div>
+      <div class="col-6 col-sm-8 col-lg-9">
+        {{ if .ProxyStatus }}
+          <span class="badge rounded-pill text-bg-success">Online</span>
+        {{ else }}
+          <span class="badge rounded-pill text-bg-danger">Offline</span>
+        {{ end }}
+      </div>
+    </div>
+    <div class="row">
+      <div class="col-6 col-sm-4 col-lg-3">
+        Connected Endpoints:
+      </div>
+      <div class="col-6 col-sm-8 col-lg-9">
+        {{ .ReadyCount }} / {{ .ClientCount }}
+      </div>
+    </div>
+    <div class="row">
+      <div class="col-6 col-sm-4 col-lg-3">
+        Latest Block:
+      </div>
+      <div class="col-6 col-sm-8 col-lg-9">
+        {{ .HeadSlot }}
+      </div>
+    </div>
+  </div>
+{{ end }}
+
+{{ define "js" }}
+{{ end }}
+{{ define "css" }}
+{{ end }}
