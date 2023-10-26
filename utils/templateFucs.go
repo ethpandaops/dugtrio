@@ -1,11 +1,13 @@
 package utils
 
 import (
+	"fmt"
 	"html/template"
 	"math"
 	"math/big"
 	"os"
 	"strings"
+	"time"
 
 	logger "github.com/sirupsen/logrus"
 )
@@ -33,8 +35,9 @@ func GetTemplateFuncs() template.FuncMap {
 		"round": func(i float64, n int) float64 {
 			return math.Round(i*math.Pow10(n)) / math.Pow10(n)
 		},
-		"percent":  func(i float64) float64 { return i * 100 },
-		"contains": strings.Contains,
+		"percent":        func(i float64) float64 { return i * 100 },
+		"contains":       strings.Contains,
+		"formatTimeDiff": FormatTimeDiff,
 	}
 }
 
@@ -48,7 +51,6 @@ func checkInList(item, list string) bool {
 	return false
 }
 
-// IncludeHTML adds html to the page
 func IncludeHTML(path string) template.HTML {
 	b, err := os.ReadFile(path)
 	if err != nil {
@@ -56,4 +58,26 @@ func IncludeHTML(path string) template.HTML {
 		return ""
 	}
 	return template.HTML(string(b))
+}
+
+func FormatTimeDiff(ts time.Time) template.HTML {
+	duration := time.Until(ts)
+	var timeStr string
+	absDuraction := duration.Abs()
+	if absDuraction < 1*time.Second {
+		return template.HTML("now")
+	} else if absDuraction < 60*time.Second {
+		timeStr = fmt.Sprintf("%v sec.", uint(absDuraction.Seconds()))
+	} else if absDuraction < 60*time.Minute {
+		timeStr = fmt.Sprintf("%v min.", uint(absDuraction.Minutes()))
+	} else if absDuraction < 24*time.Hour {
+		timeStr = fmt.Sprintf("%v hr.", uint(absDuraction.Hours()))
+	} else {
+		timeStr = fmt.Sprintf("%v day.", uint(absDuraction.Hours()/24))
+	}
+	if duration < 0 {
+		return template.HTML(fmt.Sprintf("%v ago", timeStr))
+	} else {
+		return template.HTML(fmt.Sprintf("in %v", timeStr))
+	}
 }

@@ -31,7 +31,11 @@ func (pool *BeaconPool) AddEndpoint(endpoint *types.EndpointConfig) (*PoolClient
 	return client, nil
 }
 
-func (pool *BeaconPool) GetReadyClient() *PoolClient {
+func (pool *BeaconPool) GetAllEndpoints() []*PoolClient {
+	return pool.clients
+}
+
+func (pool *BeaconPool) GetReadyEndpoint() *PoolClient {
 	// TODO: check for ready clients
 	return pool.clients[0]
 }

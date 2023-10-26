@@ -28,6 +28,7 @@ func (client *PoolClient) runUpstreamClientLoop() {
 
 		client.isOnline = false
 		client.lastError = err
+		client.lastEvent = time.Now()
 		client.retryCounter++
 		waitTime := 10
 		if client.retryCounter > 10 {
@@ -106,9 +107,9 @@ func (client *PoolClient) runUpstreamClient() error {
 	defer blockStream.Close()
 
 	// process events
-	client.lastStreamEvent = time.Now()
+	client.lastEvent = time.Now()
 	for {
-		var eventTimeout time.Duration = time.Since(client.lastStreamEvent)
+		var eventTimeout time.Duration = time.Since(client.lastEvent)
 		if eventTimeout > 30*time.Second {
 			eventTimeout = 0
 		} else {
@@ -124,7 +125,7 @@ func (client *PoolClient) runUpstreamClient() error {
 				client.processFinalizedEvent(evt.Data.(*v1.FinalizedCheckpointEvent))
 			}
 			client.logger.Tracef("event (%v) processing time: %v ms", evt.Event, time.Since(now).Milliseconds())
-			client.lastStreamEvent = time.Now()
+			client.lastEvent = time.Now()
 		case ready := <-blockStream.ReadyChan:
 			if client.isOnline != ready {
 				client.isOnline = ready
@@ -141,7 +142,7 @@ func (client *PoolClient) runUpstreamClient() error {
 				client.isOnline = false
 				return err
 			}
-			client.lastStreamEvent = time.Now()
+			client.lastEvent = time.Now()
 		}
 	}
 }

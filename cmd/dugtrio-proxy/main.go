@@ -71,15 +71,16 @@ func startDugtrio(config *types.Config) {
 		router.PathPrefix("/debug/pprof/").Handler(http.DefaultServeMux)
 	}
 	if config.Frontend.Enabled {
-		fh, err := frontend.NewFrontend(&config.Frontend)
+		frontend, err := frontend.NewFrontend(&config.Frontend)
 		if err != nil {
-			logrus.Fatalf("error initializing frontend handler: %v", err)
+			logrus.Fatalf("error initializing frontend: %v", err)
 		}
 
 		// register frontend routes
-		router.HandleFunc("/health", handlers.Health).Methods("GET")
+		frontendHandler := handlers.NewFrontendHandler(beaconPool)
+		router.HandleFunc("/health", frontendHandler.Health).Methods("GET")
 
-		router.PathPrefix("/").Handler(fh)
+		router.PathPrefix("/").Handler(frontend)
 	}
 
 	// start http server

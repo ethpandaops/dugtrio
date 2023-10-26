@@ -33,8 +33,7 @@ type PoolClient struct {
 	isSyncing       bool
 	isOptimistic    bool
 	versionStr      string
-	lastSeen        time.Time
-	lastStreamEvent time.Time
+	lastEvent       time.Time
 	retryCounter    uint64
 	lastError       error
 	headMutex       sync.RWMutex
@@ -89,6 +88,14 @@ func (client *PoolClient) GetLastHead() (phase0.Slot, phase0.Root) {
 	client.headMutex.RLock()
 	defer client.headMutex.RUnlock()
 	return client.headSlot, client.headRoot
+}
+
+func (client *PoolClient) GetLastError() error {
+	return client.lastError
+}
+
+func (client *PoolClient) GetLastEventTime() time.Time {
+	return client.lastEvent
 }
 
 func (client *PoolClient) GetStatus() ClientStatus {

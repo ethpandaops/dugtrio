@@ -24,8 +24,8 @@ var (
 )
 
 type Frontend struct {
-	handler         http.Handler
-	root            http.FileSystem
+	defaultHandler  http.Handler
+	rootFileSys     http.FileSystem
 	NotFoundHandler func(http.ResponseWriter, *http.Request)
 }
 
@@ -38,8 +38,8 @@ func NewFrontend(config *types.FrontendConfig) (*Frontend, error) {
 	}
 	fileSys := http.FS(subFs)
 	frontend := Frontend{
-		handler:         http.FileServer(fileSys),
-		root:            fileSys,
+		defaultHandler:  http.FileServer(fileSys),
+		rootFileSys:     fileSys,
 		NotFoundHandler: HandleNotFound,
 	}
 	return &frontend, nil
@@ -53,7 +53,7 @@ func (frontend *Frontend) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		r.URL.Path = upath
 	}
 	name := path.Clean(upath)
-	f, err := frontend.root.Open(name)
+	f, err := frontend.rootFileSys.Open(name)
 	if err != nil {
 		handleHTTPError(err, frontend.NotFoundHandler, w, r)
 		return
@@ -71,7 +71,7 @@ func (frontend *Frontend) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	frontend.handler.ServeHTTP(w, r)
+	frontend.defaultHandler.ServeHTTP(w, r)
 }
 
 func handleHTTPError(err error, handler func(http.ResponseWriter, *http.Request), w http.ResponseWriter, r *http.Request) {
