@@ -1,5 +1,6 @@
 .vscode
 bin/
+dist/
 .tmp
 tmp-*
 dugtrio-config.yaml
