@@ -103,6 +103,12 @@ func startHttpServer(config *types.ServerConfig, router *mux.Router) {
 	if config.IdleTimeout == 0 {
 		config.IdleTimeout = time.Second * 60
 	}
+	if config.Host == "" {
+		config.Host = "0.0.0.0"
+	}
+	if config.Port == "" {
+		config.Port = "8080"
+	}
 	srv := &http.Server{
 		Addr:         config.Host + ":" + config.Port,
 		WriteTimeout: config.WriteTimeout,
