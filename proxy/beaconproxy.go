@@ -106,6 +106,12 @@ func (proxy *BeaconProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	endpoint := proxy.pool.GetReadyEndpoint()
+	if endpoint == nil {
+		w.Header().Set("Content-Type", "text/html")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		w.Write([]byte("No Endpoint available"))
+		return
+	}
 	err := proxy.processProxyCall(w, r, endpoint)
 
 	if err != nil {
