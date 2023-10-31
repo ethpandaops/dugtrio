@@ -51,6 +51,15 @@ func (client *PoolClient) checkPoolClient() error {
 		return fmt.Errorf("initialization of attestantio/go-eth2-client failed: %w", err)
 	}
 
+	// get node version
+	nodeVersion, err := client.rpcClient.GetNodeVersion(ctx)
+	if err != nil {
+		return fmt.Errorf("error while fetching node version: %v", err)
+	}
+	client.versionStr = nodeVersion
+	client.parseClientVersion(nodeVersion)
+
+	// get & comare chain specs
 	specs, err := client.rpcClient.GetConfigSpecs(ctx)
 	if err != nil {
 		return fmt.Errorf("error while fetching specs: %v", err)
@@ -59,13 +68,6 @@ func (client *PoolClient) checkPoolClient() error {
 	if err != nil {
 		return fmt.Errorf("invalid node specs: %v", err)
 	}
-
-	// get node version
-	nodeVersion, err := client.rpcClient.GetNodeVersion(ctx)
-	if err != nil {
-		return fmt.Errorf("error while fetching node version: %v", err)
-	}
-	client.versionStr = nodeVersion
 
 	// check syncronization state
 	syncStatus, err := client.rpcClient.GetNodeSyncing(ctx)

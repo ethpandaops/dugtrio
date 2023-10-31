@@ -14,6 +14,7 @@
                 <th>Head Root</th>
                 <th>Status</th>
                 <th>Useable</th>
+                <th>Type</th>
                 <th>Version</th>
               </tr>
             </thead>
@@ -37,7 +38,7 @@
                       {{ else if eq $client.Status "offline" }}
                         <span class="badge rounded-pill text-bg-danger" data-bs-toggle="tooltip" data-bs-placement="top" title="Updated: {{ formatTimeDiff $client.LastRefresh }}, Error: {{ $client.LastError }}">Offline</span>
                       {{ else }}
-                        <span class="badge rounded-pill text-bg-dark">{{ $client.Status }}</span>
+                        <span class="badge rounded-pill text-bg-secondary">{{ $client.Status }}</span>
                       {{ end }}
                     </td>
                     <td>
@@ -45,6 +46,21 @@
                         <span class="badge rounded-pill text-bg-success">yes</span>
                       {{ else }}
                         <span class="badge rounded-pill text-bg-danger">no</span>
+                      {{ end }}
+                    </td>
+                    <td>
+                      {{ if eq $client.Type 1 }}
+                        <span class="badge rounded-pill text-bg-success">Lighthouse</span>
+                      {{ else if eq $client.Type 2 }}
+                        <span class="badge rounded-pill text-bg-success">Lodestar</span>
+                      {{ else if eq $client.Type 3 }}
+                        <span class="badge rounded-pill text-bg-success">Nimbus</span>
+                      {{ else if eq $client.Type 4 }}
+                        <span class="badge rounded-pill text-bg-success">Prysm</span>
+                      {{ else if eq $client.Type 5 }}
+                        <span class="badge rounded-pill text-bg-success">Teku</span>
+                      {{ else }}
+                        <span class="badge rounded-pill text-bg-secondary">Unknown</span>
                       {{ end }}
                     </td>
                     <td>

@@ -24,6 +24,7 @@ type HealthPageClient struct {
 	Index       int       `json:"index"`
 	Name        string    `json:"name"`
 	Version     string    `json:"version"`
+	Type        uint64    `json:"type"`
 	HeadSlot    uint64    `json:"head_slot"`
 	HeadRoot    []byte    `json:"head_root"`
 	Status      string    `json:"status"`
@@ -136,6 +137,7 @@ func (fh *FrontendHandler) getHealthPageClientData(client *pool.PoolClient) *Hea
 		Index:       int(client.GetIndex()),
 		Name:        client.GetName(),
 		Version:     client.GetVersion(),
+		Type:        uint64(client.GetClientType()),
 		HeadSlot:    uint64(headSlot),
 		HeadRoot:    headRoot[:],
 		LastRefresh: client.GetLastEventTime(),

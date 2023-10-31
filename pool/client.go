@@ -33,6 +33,7 @@ type PoolClient struct {
 	isSyncing       bool
 	isOptimistic    bool
 	versionStr      string
+	clientType      ClientType
 	lastEvent       time.Time
 	retryCounter    uint64
 	lastError       error
