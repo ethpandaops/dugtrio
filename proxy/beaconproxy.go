@@ -123,7 +123,7 @@ func (proxy *BeaconProxy) processCall(w http.ResponseWriter, r *http.Request, cl
 		w.Write([]byte("No Endpoint available"))
 		return
 	}
-	err := proxy.processProxyCall(w, r, endpoint)
+	err := proxy.processProxyCall(w, r, session, endpoint)
 
 	if err != nil {
 		w.Header().Set("Content-Type", "text/html")
@@ -148,7 +148,7 @@ func (proxy *BeaconProxy) checkBlockedPaths(url *url.URL) bool {
 	return false
 }
 
-func (proxy *BeaconProxy) processProxyCall(w http.ResponseWriter, r *http.Request, endpoint *pool.PoolClient) error {
+func (proxy *BeaconProxy) processProxyCall(w http.ResponseWriter, r *http.Request, session *ProxySession, endpoint *pool.PoolClient) error {
 	endpointConfig := endpoint.GetEndpointConfig()
 
 	// get filtered headers
@@ -161,6 +161,13 @@ func (proxy *BeaconProxy) processProxyCall(w http.ResponseWriter, r *http.Reques
 	for hk, hv := range endpointConfig.Headers {
 		hh.Add(hk, hv)
 	}
+
+	proxyIpChain := []string{}
+	if forwaredFor := r.Header.Get("X-Forwarded-For"); forwaredFor != "" {
+		proxyIpChain = strings.Split(forwaredFor, ", ")
+	}
+	proxyIpChain = append(proxyIpChain, r.RemoteAddr)
+	hh.Set("X-Forwarded-For", strings.Join(proxyIpChain, ", "))
 
 	// build proxy url
 	queryArgs := ""
@@ -197,6 +204,12 @@ func (proxy *BeaconProxy) processProxyCall(w http.ResponseWriter, r *http.Reques
 			respH[hk] = hv
 		}
 	}
+	respH.Set("X-Dugtrio-Version", fmt.Sprintf("dugtrio/%v", utils.GetVersion()))
+	respH.Set("X-Dugtrio-Session-Ip", session.GetIpAddr())
+	respH.Set("X-Dugtrio-Session-Tokens", fmt.Sprintf("%.2f", session.getCallLimitTokens()))
+	respH.Set("X-Dugtrio-Endpoint-Name", endpoint.GetName())
+	respH.Set("X-Dugtrio-Endpoint-Type", endpoint.GetClientType().String())
+	respH.Set("X-Dugtrio-Endpoint-Version", endpoint.GetVersion())
 	w.WriteHeader(resp.StatusCode)
 
 	// stream response body

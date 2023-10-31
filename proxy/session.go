@@ -98,6 +98,13 @@ func (session *ProxySession) checkCallLimit(callCost uint) error {
 	return nil
 }
 
+func (session *ProxySession) getCallLimitTokens() float64 {
+	if session.limiter == nil {
+		return 0
+	}
+	return session.limiter.Tokens()
+}
+
 func (session *ProxySession) GetIpAddr() string {
 	return session.ipAddr
 }

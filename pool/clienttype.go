@@ -1,6 +1,9 @@
 package pool
 
-import "regexp"
+import (
+	"fmt"
+	"regexp"
+)
 
 type ClientType int8
 
@@ -33,4 +36,21 @@ func (client *PoolClient) parseClientVersion(version string) {
 
 func (client *PoolClient) GetClientType() ClientType {
 	return client.clientType
+}
+
+func (clientType ClientType) String() string {
+	switch clientType {
+	case LighthouseClient:
+		return "lighthouse"
+	case LodestarClient:
+		return "lodestar"
+	case NimbusClient:
+		return "nimbus"
+	case PrysmClient:
+		return "prysm"
+	case TekuClient:
+		return "teku"
+	default:
+		return fmt.Sprintf("unknown: %d", clientType)
+	}
 }
