@@ -90,6 +90,10 @@ func NewBeaconProxy(config *types.ProxyConfig, pool *pool.BeaconPool) (*BeaconPr
 }
 
 func (proxy *BeaconProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	proxy.processCall(w, r, pool.UnspecifiedClient)
+}
+
+func (proxy *BeaconProxy) processCall(w http.ResponseWriter, r *http.Request, clientType pool.ClientType) {
 	if proxy.checkBlockedPaths(r.URL) {
 		w.Header().Set("Content-Type", "text/html")
 		w.WriteHeader(http.StatusForbidden)
@@ -110,7 +114,7 @@ func (proxy *BeaconProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		endpoint = session.lastPoolClient
 	}
 	if endpoint == nil {
-		endpoint = proxy.pool.GetReadyEndpoint()
+		endpoint = proxy.pool.GetReadyEndpoint(clientType)
 		session.lastPoolClient = endpoint
 	}
 	if endpoint == nil {

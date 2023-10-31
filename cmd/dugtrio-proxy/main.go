@@ -64,7 +64,16 @@ func startDugtrio(config *types.Config) {
 
 	// init router
 	router := mux.NewRouter()
+
+	// standardized beacon node endpoints
 	router.PathPrefix("/eth/").Handler(beaconProxy)
+
+	// client specific endpoints
+	router.PathPrefix("/lighthouse/").Handler(beaconProxy.NewClientSpecificProxy(pool.LighthouseClient))
+	router.PathPrefix("/lodestar/").Handler(beaconProxy.NewClientSpecificProxy(pool.LodestarClient))
+	router.PathPrefix("/nimbus/").Handler(beaconProxy.NewClientSpecificProxy(pool.NimbusClient))
+	router.PathPrefix("/prysm/").Handler(beaconProxy.NewClientSpecificProxy(pool.PrysmClient))
+	router.PathPrefix("/teku/").Handler(beaconProxy.NewClientSpecificProxy(pool.TekuClient))
 
 	if config.Frontend.Pprof {
 		// add pprof handler

@@ -23,13 +23,14 @@ type BeaconPool struct {
 
 	schedulerMode  SchedulerMode
 	schedulerMutex sync.Mutex
-	rrLastIndex    uint16
+	rrLastIndexes  map[ClientType]uint16
 }
 
 func NewBeaconPool(config *types.PoolConfig) (*BeaconPool, error) {
 	pool := BeaconPool{
-		config:  config,
-		clients: make([]*PoolClient, 0),
+		config:        config,
+		clients:       make([]*PoolClient, 0),
+		rrLastIndexes: map[ClientType]uint16{},
 	}
 	var err error
 
@@ -66,7 +67,7 @@ func (pool *BeaconPool) GetAllEndpoints() []*PoolClient {
 	return pool.clients
 }
 
-func (pool *BeaconPool) GetReadyEndpoint() *PoolClient {
+func (pool *BeaconPool) GetReadyEndpoint(clientType ClientType) *PoolClient {
 	canonicalFork := pool.GetCanonicalFork()
 	if canonicalFork == nil {
 		return nil
@@ -76,7 +77,7 @@ func (pool *BeaconPool) GetReadyEndpoint() *PoolClient {
 	if len(readyClients) == 0 {
 		return nil
 	}
-	selectedClient := pool.runClientScheduler(readyClients)
+	selectedClient := pool.runClientScheduler(readyClients, clientType)
 
 	return selectedClient
 }
@@ -100,20 +101,31 @@ func (pool *BeaconPool) IsClientReady(client *PoolClient) bool {
 	return false
 }
 
-func (pool *BeaconPool) runClientScheduler(readyClients []*PoolClient) *PoolClient {
+func (pool *BeaconPool) runClientScheduler(readyClients []*PoolClient, clientType ClientType) *PoolClient {
 	pool.schedulerMutex.Lock()
 	defer pool.schedulerMutex.Unlock()
 
 	switch pool.schedulerMode {
 	case RoundRobinScheduler:
+		var firstReadyClient *PoolClient
 		for _, client := range readyClients {
-			if client.clientIdx > pool.rrLastIndex {
-				pool.rrLastIndex = client.clientIdx
+			if clientType != UnspecifiedClient && clientType != client.clientType {
+				continue
+			}
+			if firstReadyClient == nil {
+				firstReadyClient = client
+			}
+			if client.clientIdx > pool.rrLastIndexes[clientType] {
+				pool.rrLastIndexes[clientType] = client.clientIdx
 				return client
 			}
 		}
-		pool.rrLastIndex = readyClients[0].clientIdx
-		return readyClients[0]
+		if firstReadyClient == nil {
+			return nil
+		} else {
+			pool.rrLastIndexes[clientType] = firstReadyClient.clientIdx
+			return firstReadyClient
+		}
 	}
 
 	return readyClients[0]
