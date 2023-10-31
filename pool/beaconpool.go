@@ -81,6 +81,25 @@ func (pool *BeaconPool) GetReadyEndpoint() *PoolClient {
 	return selectedClient
 }
 
+func (pool *BeaconPool) IsClientReady(client *PoolClient) bool {
+	if client == nil {
+		return false
+	}
+
+	canonicalFork := pool.GetCanonicalFork()
+	if canonicalFork == nil {
+		return false
+	}
+
+	readyClients := canonicalFork.ReadyClients
+	for _, readyClient := range readyClients {
+		if readyClient == client {
+			return true
+		}
+	}
+	return false
+}
+
 func (pool *BeaconPool) runClientScheduler(readyClients []*PoolClient) *PoolClient {
 	pool.schedulerMutex.Lock()
 	defer pool.schedulerMutex.Unlock()

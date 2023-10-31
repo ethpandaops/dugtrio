@@ -18,7 +18,7 @@ import (
 )
 
 func main() {
-	configPath := flag.String("config", "", "Path to the config file, if empty string defaults will be used")
+	configPath := flag.String("config", "dugtrio-config.yaml", "Path to the config file, if empty string defaults will be used")
 	flag.Parse()
 
 	config := &types.Config{}

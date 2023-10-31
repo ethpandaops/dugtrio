@@ -8,15 +8,17 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ethpandaops/dugtrio/pool"
 	"github.com/ethpandaops/dugtrio/utils"
 	"golang.org/x/time/rate"
 )
 
 type ProxySession struct {
-	ipAddr    string
-	limiter   *rate.Limiter
-	firstSeen time.Time
-	lastSeen  time.Time
+	ipAddr         string
+	limiter        *rate.Limiter
+	firstSeen      time.Time
+	lastSeen       time.Time
+	lastPoolClient *pool.PoolClient
 }
 
 func (proxy *BeaconProxy) getSessionForRequest(r *http.Request) *ProxySession {

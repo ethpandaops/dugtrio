@@ -38,6 +38,9 @@ proxy:
   # proxy session timeout
   sessionTimeout: 10m
 
+  # reuse the same endpoint when possible
+  stickyEndpoint: true
+
   # call rate limit (calls per second)
   callRateLimit: 100
 
