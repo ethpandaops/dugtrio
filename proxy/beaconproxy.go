@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ethpandaops/dugtrio/metrics"
 	"github.com/ethpandaops/dugtrio/pool"
 	"github.com/ethpandaops/dugtrio/types"
 	"github.com/ethpandaops/dugtrio/utils"
@@ -40,8 +41,9 @@ var passthruResponseHeaderKeys = [...]string{
 }
 
 type BeaconProxy struct {
-	Config       *types.ProxyConfig
+	config       *types.ProxyConfig
 	pool         *pool.BeaconPool
+	proxyMetrics *metrics.ProxyMetrics
 	logger       *logrus.Entry
 	blockedPaths []regexp.Regexp
 
@@ -49,10 +51,11 @@ type BeaconProxy struct {
 	sessions     map[string]*ProxySession
 }
 
-func NewBeaconProxy(config *types.ProxyConfig, pool *pool.BeaconPool) (*BeaconProxy, error) {
+func NewBeaconProxy(config *types.ProxyConfig, pool *pool.BeaconPool, proxyMetrics *metrics.ProxyMetrics) (*BeaconProxy, error) {
 	proxy := BeaconProxy{
-		Config:       config,
+		config:       config,
 		pool:         pool,
+		proxyMetrics: proxyMetrics,
 		logger:       logrus.WithField("module", "proxy"),
 		blockedPaths: []regexp.Regexp{},
 		sessions:     map[string]*ProxySession{},
@@ -110,7 +113,7 @@ func (proxy *BeaconProxy) processCall(w http.ResponseWriter, r *http.Request, cl
 	}
 
 	var endpoint *pool.PoolClient
-	if proxy.Config.StickyEndpoint && proxy.pool.IsClientReady(session.lastPoolClient) {
+	if proxy.config.StickyEndpoint && proxy.pool.IsClientReady(session.lastPoolClient) {
 		endpoint = session.lastPoolClient
 	}
 	if endpoint == nil {
@@ -188,14 +191,19 @@ func (proxy *BeaconProxy) processProxyCall(w http.ResponseWriter, r *http.Reques
 		ContentLength: r.ContentLength,
 		Close:         r.Close,
 	}
-
-	client := &http.Client{Timeout: proxy.Config.CallTimeout}
+	start := time.Now()
+	client := &http.Client{Timeout: proxy.config.CallTimeout}
 	resp, err := client.Do(&rr)
 	if err != nil {
 		return fmt.Errorf("proxy request error: %w", err)
 	}
-
 	defer resp.Body.Close()
+
+	// add to stats
+	if proxy.proxyMetrics != nil {
+		callDuration := time.Since(start)
+		proxy.proxyMetrics.AddCall(endpoint.GetName(), fmt.Sprintf("%s%s", r.Method, r.URL.EscapedPath()), callDuration, resp.StatusCode)
+	}
 
 	// passthru response headers
 	respH := w.Header()

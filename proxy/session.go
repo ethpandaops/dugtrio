@@ -24,9 +24,9 @@ type ProxySession struct {
 func (proxy *BeaconProxy) getSessionForRequest(r *http.Request) *ProxySession {
 	var ip string
 
-	if proxy.Config.ProxyCount > 0 {
+	if proxy.config.ProxyCount > 0 {
 		forwardIps := strings.Split(r.Header.Get("X-Forwarded-For"), ", ")
-		forwardIdx := len(forwardIps) - int(proxy.Config.ProxyCount)
+		forwardIdx := len(forwardIps) - int(proxy.config.ProxyCount)
 		if forwardIdx >= 0 {
 			ip = forwardIps[forwardIdx]
 		}
@@ -49,8 +49,8 @@ func (proxy *BeaconProxy) getSessionForRequest(r *http.Request) *ProxySession {
 			firstSeen: time.Now(),
 			lastSeen:  time.Now(),
 		}
-		if proxy.Config.CallRateLimit > 0 {
-			session.limiter = rate.NewLimiter(rate.Limit(proxy.Config.CallRateLimit), int(proxy.Config.CallRateBurst))
+		if proxy.config.CallRateLimit > 0 {
+			session.limiter = rate.NewLimiter(rate.Limit(proxy.config.CallRateLimit), int(proxy.config.CallRateBurst))
 		}
 		proxy.sessions[ip] = session
 	} else {
@@ -80,7 +80,7 @@ func (proxy *BeaconProxy) cleanupSessions() {
 
 		proxy.sessionMutex.Lock()
 		for ip, session := range proxy.sessions {
-			if time.Since(session.lastSeen) > proxy.Config.SessionTimeout {
+			if time.Since(session.lastSeen) > proxy.config.SessionTimeout {
 				delete(proxy.sessions, ip)
 			}
 		}

@@ -1,6 +1,8 @@
 package handlers
 
-import "github.com/ethpandaops/dugtrio/pool"
+import (
+	"github.com/ethpandaops/dugtrio/pool"
+)
 
 type FrontendHandler struct {
 	pool *pool.BeaconPool

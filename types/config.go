@@ -11,6 +11,7 @@ type Config struct {
 	Pool      *PoolConfig       `yaml:"pool"`
 	Proxy     *ProxyConfig      `yaml:"proxy"`
 	Frontend  *FrontendConfig   `yaml:"frontend"`
+	Metrics   *MetricsConfig    `yaml:"metrics"`
 }
 
 type LoggingConfig struct {
@@ -61,4 +62,8 @@ type FrontendConfig struct {
 	Pprof    bool   `yaml:"pprof" envconfig:"FRONTEND_PPROF"`
 	Minify   bool   `yaml:"minify" envconfig:"FRONTEND_MINIFY"`
 	SiteName string `yaml:"siteName" envconfig:"FRONTEND_SITE_NAME"`
+}
+
+type MetricsConfig struct {
+	Enabled bool `yaml:"enabled" envconfig:"METRICS_ENABLED"`
 }

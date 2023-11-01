@@ -6,11 +6,13 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/negroni"
 
 	"github.com/ethpandaops/dugtrio/frontend"
 	"github.com/ethpandaops/dugtrio/frontend/handlers"
+	"github.com/ethpandaops/dugtrio/metrics"
 	"github.com/ethpandaops/dugtrio/pool"
 	"github.com/ethpandaops/dugtrio/proxy"
 	"github.com/ethpandaops/dugtrio/types"
@@ -56,14 +58,21 @@ func startDugtrio(config *types.Config) {
 		}
 	}
 
+	// init router
+	router := mux.NewRouter()
+
+	// init metrics
+	var proxyMetrics *metrics.ProxyMetrics
+	if config.Metrics.Enabled {
+		proxyMetrics = metrics.NewProxyMetrics(beaconPool)
+		router.Path("/metrics").Handler(promhttp.Handler())
+	}
+
 	// init proxy handler
-	beaconProxy, err := proxy.NewBeaconProxy(config.Proxy, beaconPool)
+	beaconProxy, err := proxy.NewBeaconProxy(config.Proxy, beaconPool, proxyMetrics)
 	if err != nil {
 		logrus.Fatalf("error initializing beacon proxy: %v", err)
 	}
-
-	// init router
-	router := mux.NewRouter()
 
 	// standardized beacon node endpoints
 	router.PathPrefix("/eth/").Handler(beaconProxy)
