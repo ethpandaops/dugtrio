@@ -33,6 +33,7 @@ var passthruResponseHeaderKeys = [...]string{
 	"Content-Type",
 	"Date",
 	"Etag",
+	"Eth-Consensus-Version",
 	"Expires",
 	"Last-Modified",
 	"Location",
