@@ -34,6 +34,8 @@ var passthruResponseHeaderKeys = [...]string{
 	"Date",
 	"Etag",
 	"Eth-Consensus-Version",
+	"Eth-Execution-Payload-Blinded",
+	"Eth-Execution-Payload-Value",
 	"Expires",
 	"Last-Modified",
 	"Location",
