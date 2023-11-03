@@ -116,6 +116,9 @@ func (proxy *BeaconProxy) processProxyCall(w http.ResponseWriter, r *http.Reques
 		proxy.proxyMetrics.AddCall(endpoint.GetName(), fmt.Sprintf("%s%s", r.Method, r.URL.EscapedPath()), callDuration, resp.StatusCode)
 	}
 
+	respContentType := resp.Header.Get("Content-Type")
+	isEventStream := respContentType == "text/event-stream"
+
 	// passthru response headers
 	respH := w.Header()
 	for _, hk := range passthruResponseHeaderKeys {
@@ -129,11 +132,13 @@ func (proxy *BeaconProxy) processProxyCall(w http.ResponseWriter, r *http.Reques
 	respH.Set("X-Dugtrio-Endpoint-Name", endpoint.GetName())
 	respH.Set("X-Dugtrio-Endpoint-Type", endpoint.GetClientType().String())
 	respH.Set("X-Dugtrio-Endpoint-Version", endpoint.GetVersion())
+	if isEventStream {
+		respH.Set("X-Accel-Buffering", "no")
+	}
 	w.WriteHeader(resp.StatusCode)
 
-	respContentType := resp.Header.Get("Content-Type")
 	var respLen int64
-	if respContentType == "text/event-stream" {
+	if isEventStream {
 		callContext.updateChan <- proxy.config.CallTimeout
 		if f, ok := w.(http.Flusher); ok {
 			f.Flush()
