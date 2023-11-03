@@ -25,10 +25,10 @@ func (proxy *BeaconProxy) getSessionForRequest(r *http.Request) *ProxySession {
 	var ip string
 
 	if proxy.config.ProxyCount > 0 {
-		forwardIps := strings.Split(r.Header.Get("X-Forwarded-For"), ", ")
+		forwardIps := strings.Split(r.Header.Get("X-Forwarded-For"), ",")
 		forwardIdx := len(forwardIps) - int(proxy.config.ProxyCount)
 		if forwardIdx >= 0 {
-			ip = forwardIps[forwardIdx]
+			ip = strings.Trim(forwardIps[forwardIdx], " ")
 		}
 	}
 	if ip == "" {
