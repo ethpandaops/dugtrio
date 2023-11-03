@@ -117,7 +117,7 @@ func (proxy *BeaconProxy) processProxyCall(w http.ResponseWriter, r *http.Reques
 	}
 
 	respContentType := resp.Header.Get("Content-Type")
-	isEventStream := respContentType == "text/event-stream"
+	isEventStream := respContentType == "text/event-stream" || strings.HasPrefix(r.URL.EscapedPath(), "/eth/v1/events")
 
 	// passthru response headers
 	respH := w.Header()
