@@ -152,7 +152,7 @@ func (proxy *BeaconProxy) processProxyCall(w http.ResponseWriter, r *http.Reques
 		respLen = rspLen
 	}
 
-	proxy.logger.Infof("proxied %v %v call (endpoint: %v, status: %v, length: %v)", r.Method, r.URL.EscapedPath(), endpoint.GetName(), resp.StatusCode, respLen)
+	proxy.logger.Infof("proxied %v %v call (ip: %v, status: %v, length: %v, endpoint: %v)", r.Method, r.URL.EscapedPath(), session.GetIpAddr(), resp.StatusCode, respLen, endpoint.GetName())
 	return nil
 }
 

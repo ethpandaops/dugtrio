@@ -34,6 +34,22 @@ func (client *PoolClient) parseClientVersion(version string) {
 	client.clientType = UnknownClient
 }
 
+func ParseClientType(name string) ClientType {
+	switch name {
+	case "lighthouse":
+		return LighthouseClient
+	case "lodestar":
+		return LodestarClient
+	case "nimbus":
+		return NimbusClient
+	case "prysm":
+		return PrysmClient
+	case "teku":
+		return TekuClient
+	}
+	return UnknownClient
+}
+
 func (client *PoolClient) GetClientType() ClientType {
 	return client.clientType
 }

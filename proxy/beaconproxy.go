@@ -117,6 +117,18 @@ func (proxy *BeaconProxy) processCall(w http.ResponseWriter, r *http.Request, cl
 	if proxy.config.StickyEndpoint && proxy.pool.IsClientReady(session.lastPoolClient) {
 		endpoint = session.lastPoolClient
 	}
+
+	nextEndpoint := r.Header.Get("X-Dugtrio-Next-Endpoint")
+	if nextEndpoint == "" {
+		nextEndpoint = r.URL.Query().Get("dugtrio-next-endpoint")
+	}
+	if nextEndpoint != "" {
+		nextEndpointType := pool.ParseClientType(nextEndpoint)
+		if nextEndpointType != pool.UnknownClient {
+			clientType = nextEndpointType
+		}
+		endpoint = nil
+	}
 	if endpoint == nil || (clientType != pool.UnspecifiedClient && endpoint.GetClientType() != clientType) {
 		endpoint = proxy.pool.GetReadyEndpoint(clientType)
 		session.lastPoolClient = endpoint
