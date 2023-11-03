@@ -116,3 +116,7 @@ func (session *ProxySession) GetFirstSeen() time.Time {
 func (session *ProxySession) GetLastSeen() time.Time {
 	return session.lastSeen
 }
+
+func (session *ProxySession) updateLastSeen() {
+	session.lastSeen = time.Now()
+}

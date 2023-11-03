@@ -138,7 +138,7 @@ func (proxy *BeaconProxy) processProxyCall(w http.ResponseWriter, r *http.Reques
 		if f, ok := w.(http.Flusher); ok {
 			f.Flush()
 		}
-		rspLen, err := proxy.processEventStreamResponse(callContext, w, resp.Body)
+		rspLen, err := proxy.processEventStreamResponse(callContext, w, resp.Body, session)
 		if err != nil {
 			proxy.logger.Warnf("proxy event stream error: %v", err)
 		}
@@ -156,7 +156,7 @@ func (proxy *BeaconProxy) processProxyCall(w http.ResponseWriter, r *http.Reques
 	return nil
 }
 
-func (proxy *BeaconProxy) processEventStreamResponse(callContext *proxyCallContext, w http.ResponseWriter, r io.ReadCloser) (int64, error) {
+func (proxy *BeaconProxy) processEventStreamResponse(callContext *proxyCallContext, w http.ResponseWriter, r io.ReadCloser, session *ProxySession) (int64, error) {
 	rd := bufio.NewReader(r)
 	written := int64(0)
 	for {
@@ -180,6 +180,8 @@ func (proxy *BeaconProxy) processEventStreamResponse(callContext *proxyCallConte
 		if callContext.cancelled {
 			return written, nil
 		}
+
+		session.updateLastSeen()
 		callContext.updateChan <- proxy.config.CallTimeout
 	}
 }
