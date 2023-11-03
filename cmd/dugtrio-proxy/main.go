@@ -3,7 +3,6 @@ package main
 import (
 	"flag"
 	"net/http"
-	"time"
 
 	"github.com/gorilla/mux"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -112,15 +111,6 @@ func startHttpServer(config *types.ServerConfig, router *mux.Router) {
 	//n.Use(gzip.Gzip(gzip.DefaultCompression))
 	n.UseHandler(router)
 
-	if config.WriteTimeout == 0 {
-		config.WriteTimeout = time.Second * 15
-	}
-	if config.ReadTimeout == 0 {
-		config.ReadTimeout = time.Second * 15
-	}
-	if config.IdleTimeout == 0 {
-		config.IdleTimeout = time.Second * 60
-	}
 	if config.Host == "" {
 		config.Host = "0.0.0.0"
 	}
