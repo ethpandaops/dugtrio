@@ -82,6 +82,7 @@ func startDugtrio(config *types.Config) {
 	router.PathPrefix("/nimbus/").Handler(beaconProxy.NewClientSpecificProxy(pool.NimbusClient))
 	router.PathPrefix("/prysm/").Handler(beaconProxy.NewClientSpecificProxy(pool.PrysmClient))
 	router.PathPrefix("/teku/").Handler(beaconProxy.NewClientSpecificProxy(pool.TekuClient))
+	router.PathPrefix("/grandine/").Handler(beaconProxy.NewClientSpecificProxy(pool.GrandineClient))
 
 	if config.Frontend.Pprof {
 		// add pprof handler
