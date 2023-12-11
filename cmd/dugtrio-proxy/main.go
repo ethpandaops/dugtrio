@@ -84,6 +84,9 @@ func startDugtrio(config *types.Config) {
 	router.PathPrefix("/teku/").Handler(beaconProxy.NewClientSpecificProxy(pool.TekuClient))
 	router.PathPrefix("/grandine/").Handler(beaconProxy.NewClientSpecificProxy(pool.GrandineClient))
 
+	// healthcheck endpoint
+	router.HandleFunc("/healthcheck", beaconProxy.ServeHealthCheckHTTP).Methods("GET")
+
 	if config.Frontend.Pprof {
 		// add pprof handler
 		router.PathPrefix("/debug/pprof/").Handler(http.DefaultServeMux)

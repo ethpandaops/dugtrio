@@ -97,6 +97,19 @@ func (proxy *BeaconProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	proxy.processCall(w, r, pool.UnspecifiedClient)
 }
 
+func (proxy *BeaconProxy) ServeHealthCheckHTTP(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/html")
+
+	canonicalFork := proxy.pool.GetCanonicalFork()
+	if canonicalFork == nil || len(canonicalFork.ReadyClients) == 0 {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		w.Write([]byte("no_useable_endpoint"))
+		return
+	}
+
+	w.Write([]byte("ready"))
+}
+
 func (proxy *BeaconProxy) processCall(w http.ResponseWriter, r *http.Request, clientType pool.ClientType) {
 	if proxy.checkBlockedPaths(r.URL) {
 		w.Header().Set("Content-Type", "text/html")
