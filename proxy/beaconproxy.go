@@ -20,6 +20,7 @@ var passthruRequestHeaderKeys = [...]string{
 	"Accept-Encoding",
 	"Accept-Language",
 	"Cache-Control",
+	"Content-Type",
 	"Cookie",
 	"Referer",
 	"User-Agent",
