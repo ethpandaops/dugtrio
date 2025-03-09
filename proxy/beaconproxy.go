@@ -71,9 +71,7 @@ func NewBeaconProxy(config *types.ProxyConfig, pool *pool.BeaconPool, proxyMetri
 	}
 
 	blockedPaths := []string{}
-	for _, blockedPath := range config.BlockedPaths {
-		blockedPaths = append(blockedPaths, blockedPath)
-	}
+	blockedPaths = append(blockedPaths, config.BlockedPaths...)
 	for _, blockedPath := range strings.Split(config.BlockedPathsStr, ",") {
 		blockedPath = strings.Trim(blockedPath, " ")
 		if blockedPath == "" {

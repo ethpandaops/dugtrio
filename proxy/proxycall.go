@@ -36,7 +36,7 @@ func (proxy *BeaconProxy) newProxyCallContext(parent context.Context, timeout ti
 func (callContext *proxyCallContext) processCallContext() {
 ctxLoop:
 	for {
-		timeout := callContext.deadline.Sub(time.Now())
+		timeout := time.Until(callContext.deadline)
 		select {
 		case newTimeout := <-callContext.updateChan:
 			callContext.deadline = time.Now().Add(newTimeout)
@@ -157,7 +157,7 @@ func (proxy *BeaconProxy) processProxyCall(w http.ResponseWriter, r *http.Reques
 		respLen = rspLen
 	}
 
-	proxy.logger.Infof("proxied %v %v call (ip: %v, status: %v, length: %v, endpoint: %v)", r.Method, r.URL.EscapedPath(), session.GetIpAddr(), resp.StatusCode, respLen, endpoint.GetName())
+	proxy.logger.Debugf("proxied %v %v call (ip: %v, status: %v, length: %v, endpoint: %v)", r.Method, r.URL.EscapedPath(), session.GetIpAddr(), resp.StatusCode, respLen, endpoint.GetName())
 	return nil
 }
 
