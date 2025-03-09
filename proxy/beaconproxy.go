@@ -24,6 +24,11 @@ var passthruRequestHeaderKeys = [...]string{
 	"Cookie",
 	"Referer",
 	"User-Agent",
+	"Eth-Consensus-Version",
+	"Eth-Consensus-Block-Value",
+	"Eth-Consensus-Dependent-Root",
+	"Eth-Execution-Payload-Value",
+	"Eth-Execution-Payload-Blinded",
 }
 
 var passthruResponseHeaderKeys = [...]string{
@@ -33,6 +38,8 @@ var passthruResponseHeaderKeys = [...]string{
 	"Date",
 	"Etag",
 	"Eth-Consensus-Version",
+	"Eth-Consensus-Block-Value",
+	"Eth-Consensus-Dependent-Root",
 	"Eth-Execution-Payload-Blinded",
 	"Eth-Execution-Payload-Value",
 	"Expires",
