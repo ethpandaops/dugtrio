@@ -26,19 +26,12 @@ func (client *PoolClient) runPoolClientLoop() {
 			return
 		}
 
-		client.isOnline = false
+		client.updateStatus(false, client.isSyncing, client.isOptimistic)
 		client.lastError = err
 		client.lastEvent = time.Now()
 		client.retryCounter++
-		waitTime := 10
-		if client.retryCounter > 10 {
-			waitTime = 300
-		} else if client.retryCounter > 5 {
-			waitTime = 60
-		}
 
-		client.logger.Warnf("upstream client error: %v, retrying in %v sec...", err, waitTime)
-		time.Sleep(time.Duration(waitTime) * time.Second)
+		time.Sleep(10 * time.Second)
 	}
 }
 
@@ -77,8 +70,7 @@ func (client *PoolClient) checkPoolClient() error {
 	if syncStatus == nil {
 		return fmt.Errorf("could not get synchronization status")
 	}
-	client.isSyncing = syncStatus.IsSyncing
-	client.isOptimistic = syncStatus.IsOptimistic
+	client.updateStatus(client.isOnline, syncStatus.IsSyncing, syncStatus.IsOptimistic)
 
 	return nil
 }
@@ -130,7 +122,7 @@ func (client *PoolClient) runPoolClient() error {
 			client.lastEvent = time.Now()
 		case ready := <-blockStream.ReadyChan:
 			if client.isOnline != ready {
-				client.isOnline = ready
+				client.updateStatus(ready, client.isSyncing, client.isOptimistic)
 				if ready {
 					client.logger.Debug("RPC event stream connected")
 				} else {
@@ -141,11 +133,24 @@ func (client *PoolClient) runPoolClient() error {
 			client.logger.Debug("no head event since 30 secs, polling chain head")
 			err := client.pollClientHead()
 			if err != nil {
-				client.isOnline = false
+				client.updateStatus(false, client.isSyncing, client.isOptimistic)
 				return err
 			}
 			client.lastEvent = time.Now()
 		}
+	}
+}
+
+func (client *PoolClient) updateStatus(online bool, syncing bool, optimistic bool) {
+	oldStatus := client.GetStatus()
+
+	client.isOnline = online
+	client.isSyncing = syncing
+	client.isOptimistic = optimistic
+
+	newStatus := client.GetStatus()
+	if oldStatus != newStatus {
+		client.logger.Infof("status changed  %v -> %v", oldStatus, newStatus)
 	}
 }
 

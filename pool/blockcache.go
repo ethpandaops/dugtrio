@@ -19,7 +19,6 @@ import (
 type BlockCache struct {
 	followDistance uint64
 	specMutex      sync.RWMutex
-	specHash       uint64
 	specs          *types.ChainConfig
 	finalizedMutex sync.RWMutex
 	finalizedEpoch phase0.Epoch
@@ -133,9 +132,7 @@ func (cache *BlockCache) GetCachedBlocks() []*CachedBlock {
 	})
 
 	for _, slot := range slots {
-		for _, block := range cache.slotMap[slot] {
-			blocks = append(blocks, block)
-		}
+		blocks = append(blocks, cache.slotMap[slot]...)
 	}
 	return blocks
 }

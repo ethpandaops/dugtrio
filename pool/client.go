@@ -12,15 +12,6 @@ import (
 	"github.com/ethpandaops/dugtrio/types"
 )
 
-type ClientStatus uint8
-
-var (
-	ClientStatusOnline        ClientStatus = 1
-	ClientStatusOffline       ClientStatus = 2
-	ClientStatusSynchronizing ClientStatus = 3
-	ClientStatusOptimistic    ClientStatus = 4
-)
-
 type PoolClient struct {
 	beaconPool      *BeaconPool
 	clientIdx       uint16
