@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"net/http"
-	"time"
 
 	"github.com/ethpandaops/dugtrio/frontend"
 )
@@ -13,13 +12,13 @@ type SessionsPage struct {
 }
 
 type SessionsPageSession struct {
-	Index     int       `json:"index"`
-	Key       string    `json:"key"`
-	FirstSeen time.Time `json:"first_seen"`
-	LastSeen  time.Time `json:"last_seen"`
-	Requests  uint64    `json:"requests"`
-	Tokens    float64   `json:"tokens"`
-	Target    string    `json:"target"`
+	Index     int     `json:"index"`
+	Key       string  `json:"key"`
+	FirstSeen string  `json:"first_seen"`
+	LastSeen  string  `json:"last_seen"`
+	Requests  uint64  `json:"requests"`
+	Tokens    float64 `json:"tokens"`
+	Target    string  `json:"target"`
 }
 
 // Sessions will return the "sessions" page using a go template
@@ -53,8 +52,8 @@ func (fh *FrontendHandler) getSessionsPageData() (*SessionsPage, error) {
 		sessionData := &SessionsPageSession{
 			Index:     index + 1,
 			Key:       session.GetIpAddr(),
-			FirstSeen: session.GetFirstSeen(),
-			LastSeen:  session.GetLastSeen(),
+			FirstSeen: session.GetFirstSeen().Format("2006-01-02 15:04:05"),
+			LastSeen:  session.GetLastSeen().Format("2006-01-02 15:04:05"),
 			Requests:  session.GetRequests(),
 			Tokens:    session.GetLimiterTokens(),
 			Target:    "",

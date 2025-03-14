@@ -15,8 +15,13 @@ func (proxy *BeaconProxy) CheckAuthorization(r *http.Request) (string, bool) {
 		return "", !requireAuth
 	}
 
+	// Check the auth type
+	if !strings.HasPrefix(authHeader, "Basic ") {
+		return "", !requireAuth
+	}
+
 	// decode the header
-	decoded, err := base64.StdEncoding.DecodeString(authHeader)
+	decoded, err := base64.StdEncoding.DecodeString(authHeader[6:])
 	if err != nil {
 		return "", !requireAuth
 	}
