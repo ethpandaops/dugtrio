@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-func (proxy *BeaconProxy) checkAuthorization(r *http.Request) (string, bool) {
+func (proxy *BeaconProxy) CheckAuthorization(r *http.Request) (string, bool) {
 	requireAuth := proxy.config.Auth != nil && proxy.config.Auth.Required
 
 	// Get the authorization header

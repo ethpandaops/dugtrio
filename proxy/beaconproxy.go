@@ -124,7 +124,7 @@ func (proxy *BeaconProxy) processCall(w http.ResponseWriter, r *http.Request, cl
 		return
 	}
 
-	identifier, validAuth := proxy.checkAuthorization(r)
+	identifier, validAuth := proxy.CheckAuthorization(r)
 	if !validAuth {
 		w.Header().Set("Content-Type", "text/html")
 		w.WriteHeader(http.StatusUnauthorized)
@@ -166,8 +166,10 @@ func (proxy *BeaconProxy) processCall(w http.ResponseWriter, r *http.Request, cl
 		w.Write([]byte("No Endpoint available"))
 		return
 	}
-	err := proxy.processProxyCall(w, r, session, endpoint)
 
+	session.requests.Add(1)
+
+	err := proxy.processProxyCall(w, r, session, endpoint)
 	if err != nil {
 		w.Header().Set("Content-Type", "text/html")
 		w.WriteHeader(http.StatusInternalServerError)

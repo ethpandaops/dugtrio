@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"sort"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/ethpandaops/dugtrio/pool"
@@ -19,6 +20,7 @@ type ProxySession struct {
 	firstSeen      time.Time
 	lastSeen       time.Time
 	lastPoolClient *pool.PoolClient
+	requests       atomic.Uint64
 }
 
 func (proxy *BeaconProxy) getSessionForRequest(r *http.Request, ident string) *ProxySession {
@@ -119,6 +121,21 @@ func (session *ProxySession) GetFirstSeen() time.Time {
 
 func (session *ProxySession) GetLastSeen() time.Time {
 	return session.lastSeen
+}
+
+func (session *ProxySession) GetLastPoolClient() *pool.PoolClient {
+	return session.lastPoolClient
+}
+
+func (session *ProxySession) GetRequests() uint64 {
+	return session.requests.Load()
+}
+
+func (session *ProxySession) GetLimiterTokens() float64 {
+	if session.limiter == nil {
+		return 0
+	}
+	return session.limiter.Tokens()
 }
 
 func (session *ProxySession) updateLastSeen() {

@@ -98,9 +98,10 @@ func startDugtrio(config *types.Config) {
 		}
 
 		// register frontend routes
-		frontendHandler := handlers.NewFrontendHandler(beaconPool)
+		frontendHandler := handlers.NewFrontendHandler(beaconPool, beaconProxy)
 		router.HandleFunc("/", frontendHandler.Index).Methods("GET")
 		router.HandleFunc("/health", frontendHandler.Health).Methods("GET")
+		router.HandleFunc("/sessions", frontendHandler.Sessions).Methods("GET")
 
 		router.PathPrefix("/").Handler(frontend)
 	}
