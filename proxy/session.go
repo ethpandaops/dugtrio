@@ -21,7 +21,7 @@ type ProxySession struct {
 	lastPoolClient *pool.PoolClient
 }
 
-func (proxy *BeaconProxy) getSessionForRequest(r *http.Request) *ProxySession {
+func (proxy *BeaconProxy) getSessionForRequest(r *http.Request, ident string) *ProxySession {
 	var ip string
 
 	if proxy.config.ProxyCount > 0 {
@@ -41,6 +41,10 @@ func (proxy *BeaconProxy) getSessionForRequest(r *http.Request) *ProxySession {
 
 	proxy.sessionMutex.Lock()
 	defer proxy.sessionMutex.Unlock()
+
+	if ident != "" {
+		ip = fmt.Sprintf("%s-%s", ip, ident)
+	}
 
 	session := proxy.sessions[ip]
 	if session == nil {

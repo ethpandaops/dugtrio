@@ -54,6 +54,7 @@ type ProxyConfig struct {
 	CallRateBurst   uint64        `yaml:"callRateBurst" envconfig:"PROXY_CALL_RATE_BURST"`
 	BlockedPathsStr string        `envconfig:"PROXY_BLOCKED_PATHS"`
 	BlockedPaths    []string      `yaml:"blockedPaths"`
+	Auth            *AuthConfig   `yaml:"auth"`
 }
 
 type FrontendConfig struct {
@@ -62,6 +63,11 @@ type FrontendConfig struct {
 	Pprof    bool   `yaml:"pprof" envconfig:"FRONTEND_PPROF"`
 	Minify   bool   `yaml:"minify" envconfig:"FRONTEND_MINIFY"`
 	SiteName string `yaml:"siteName" envconfig:"FRONTEND_SITE_NAME"`
+}
+
+type AuthConfig struct {
+	Required bool   `yaml:"required" envconfig:"PROXY_AUTH_REQUIRED"`
+	Password string `yaml:"password" envconfig:"PROXY_AUTH_PASSWORD"`
 }
 
 type MetricsConfig struct {

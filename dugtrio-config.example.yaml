@@ -51,6 +51,11 @@ proxy:
   blockedPaths:
     - ^/eth/v[0-9]+/debug/.*
 
+  # optional authorization
+  authorization:
+    require: false
+    password: ""
+
 # Frontend configuration
 frontend:
   # Enable or disable to web frontend

@@ -124,7 +124,15 @@ func (proxy *BeaconProxy) processCall(w http.ResponseWriter, r *http.Request, cl
 		return
 	}
 
-	session := proxy.getSessionForRequest(r)
+	identifier, validAuth := proxy.checkAuthorization(r)
+	if !validAuth {
+		w.Header().Set("Content-Type", "text/html")
+		w.WriteHeader(http.StatusUnauthorized)
+		w.Write([]byte("Unauthorized"))
+		return
+	}
+
+	session := proxy.getSessionForRequest(r, identifier)
 	if session.checkCallLimit(1) != nil {
 		w.Header().Set("Content-Type", "text/html")
 		w.WriteHeader(http.StatusTooManyRequests)
