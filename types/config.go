@@ -60,6 +60,8 @@ type ProxyConfig struct {
 	RebalanceInterval time.Duration `yaml:"rebalanceInterval"`
 	// RebalanceThreshold is the percentage difference from ideal distribution that triggers rebalancing (0-1)
 	RebalanceThreshold float64 `yaml:"rebalanceThreshold"`
+	// RebalanceAbsThreshold is the absolute difference in sessions that triggers rebalancing
+	RebalanceAbsThreshold int `yaml:"rebalanceAbsThreshold"`
 	// RebalanceMaxSweep is the maximum number of sessions to rebalance per run (0 = unlimited)
 	RebalanceMaxSweep int `yaml:"rebalanceMaxSweep"`
 }

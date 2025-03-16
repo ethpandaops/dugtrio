@@ -58,9 +58,12 @@ proxy:
 
   # how often to check for session imbalances (0 = disabled)
   rebalanceInterval: 10s
-  
+
   # how much imbalance to tolerate (0-1)
   rebalanceThreshold: 0.1
+
+  # absolute difference in sessions that triggers rebalancing
+  rebalanceAbsThreshold: 3
 
   # maximum number of sessions to rebalance per run (0 = unlimited)
   rebalanceMaxSweep: 10
