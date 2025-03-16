@@ -151,6 +151,7 @@ func (client *PoolClient) updateStatus(online bool, syncing bool, optimistic boo
 	newStatus := client.GetStatus()
 	if oldStatus != newStatus {
 		client.logger.Infof("status changed  %v -> %v", oldStatus, newStatus)
+		client.beaconPool.resetHeadForkCache()
 	}
 }
 

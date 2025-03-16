@@ -23,7 +23,15 @@ type ProxySession struct {
 	lastSeen       time.Time
 	lastPoolClient *pool.PoolClient
 	requests       atomic.Uint64
-	activeContexts sync.Map
+	activeContexts struct {
+		sync.Mutex
+		contexts map[uint64]context.CancelFunc
+		nextID   uint64
+	}
+}
+
+func (session *ProxySession) init() {
+	session.activeContexts.contexts = make(map[uint64]context.CancelFunc)
 }
 
 func (proxy *BeaconProxy) getSessionForRequest(r *http.Request, ident string) *ProxySession {
@@ -58,6 +66,7 @@ func (proxy *BeaconProxy) getSessionForRequest(r *http.Request, ident string) *P
 			firstSeen: time.Now(),
 			lastSeen:  time.Now(),
 		}
+		session.init()
 		if proxy.config.CallRateLimit > 0 {
 			session.limiter = rate.NewLimiter(rate.Limit(proxy.config.CallRateLimit), int(proxy.config.CallRateBurst))
 		}
@@ -145,21 +154,30 @@ func (session *ProxySession) updateLastSeen() {
 	session.lastSeen = time.Now()
 }
 
-func (session *ProxySession) addActiveContext(cancel context.CancelFunc) {
-	session.activeContexts.Store(cancel, struct{}{})
+func (session *ProxySession) addActiveContext(cancel context.CancelFunc) uint64 {
+	session.activeContexts.Lock()
+	defer session.activeContexts.Unlock()
+
+	id := session.activeContexts.nextID
+	session.activeContexts.nextID++
+	session.activeContexts.contexts[id] = cancel
+	return id
 }
 
-func (session *ProxySession) removeActiveContext(cancel context.CancelFunc) {
-	session.activeContexts.Delete(cancel)
+func (session *ProxySession) removeActiveContext(id uint64) {
+	session.activeContexts.Lock()
+	defer session.activeContexts.Unlock()
+	delete(session.activeContexts.contexts, id)
 }
 
 func (session *ProxySession) cancelActiveConnections() {
-	session.activeContexts.Range(func(key, value interface{}) bool {
-		cancel := key.(context.CancelFunc)
+	session.activeContexts.Lock()
+	defer session.activeContexts.Unlock()
+
+	for id, cancel := range session.activeContexts.contexts {
 		cancel()
-		session.activeContexts.Delete(key)
-		return true
-	})
+		delete(session.activeContexts.contexts, id)
+	}
 }
 
 func (session *ProxySession) setLastPoolClient(client *pool.PoolClient) {
