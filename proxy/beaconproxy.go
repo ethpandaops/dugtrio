@@ -232,18 +232,19 @@ func (proxy *BeaconProxy) rebalanceSessions() {
 	idealCount := float64(totalSessions) / float64(len(readyClients))
 
 	// Check if any endpoint exceeds threshold
-	needsRebalance := false
 	var diff float64
-	for _, count := range endpointCounts {
-		diff = math.Abs(float64(count)-idealCount) / idealCount
-		if diff > proxy.config.RebalanceThreshold {
-			needsRebalance = true
-			break
+	needsRebalance := func() bool {
+		for _, count := range endpointCounts {
+			diff = math.Abs(float64(count)-idealCount) / idealCount
+			if diff > proxy.config.RebalanceThreshold {
+				return true
+			}
 		}
+		return false
 	}
 
 	// Rebalance if needed
-	if needsRebalance {
+	if needsRebalance() {
 		proxy.logger.Infof("Rebalancing sessions (threshold exceeded: ideal=%v, diff=%v)", idealCount, diff)
 
 		// Sort endpoints by session count
@@ -276,9 +277,12 @@ func (proxy *BeaconProxy) rebalanceSessions() {
 					}
 				}
 
+				if !needsRebalance() {
+					break
+				}
+
 				// Check if we've hit the rebalance limit
 				if proxy.config.RebalanceMaxSweep > 0 && rebalancedCount >= proxy.config.RebalanceMaxSweep {
-					proxy.logger.Infof("Rebalancing limit reached (%d sessions)", rebalancedCount)
 					break
 				}
 
@@ -287,7 +291,7 @@ func (proxy *BeaconProxy) rebalanceSessions() {
 				})
 			}
 		}
-		proxy.logger.Infof("Rebalanced %d sessions", rebalancedCount)
+		proxy.logger.Infof("Rebalanced %d sessions (threshold exceeded: ideal=%v, diff=%v)", rebalancedCount, idealCount, diff)
 	}
 	proxy.sessionMutex.Unlock()
 }
