@@ -56,7 +56,11 @@ ctxLoop:
 
 func (proxy *BeaconProxy) processProxyCall(w http.ResponseWriter, r *http.Request, session *ProxySession, endpoint *pool.PoolClient) error {
 	callContext := proxy.newProxyCallContext(r.Context(), proxy.config.CallTimeout)
-	defer callContext.cancelFn()
+	session.addActiveContext(callContext.cancelFn)
+	defer func() {
+		callContext.cancelFn()
+		session.removeActiveContext(callContext.cancelFn)
+	}()
 
 	endpointConfig := endpoint.GetEndpointConfig()
 

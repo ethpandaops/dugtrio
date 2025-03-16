@@ -56,6 +56,15 @@ proxy:
     require: false
     password: ""
 
+  # how often to check for session imbalances (0 = disabled)
+  rebalanceInterval: 10s
+  
+  # how much imbalance to tolerate (0-1)
+  rebalanceThreshold: 0.1
+
+  # maximum number of sessions to rebalance per run (0 = unlimited)
+  rebalanceMaxSweep: 10
+
 # Frontend configuration
 frontend:
   # Enable or disable to web frontend

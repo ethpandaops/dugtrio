@@ -1,11 +1,13 @@
 package proxy
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"net/http"
 	"sort"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -21,6 +23,7 @@ type ProxySession struct {
 	lastSeen       time.Time
 	lastPoolClient *pool.PoolClient
 	requests       atomic.Uint64
+	activeContexts sync.Map
 }
 
 func (proxy *BeaconProxy) getSessionForRequest(r *http.Request, ident string) *ProxySession {
@@ -140,4 +143,28 @@ func (session *ProxySession) GetLimiterTokens() float64 {
 
 func (session *ProxySession) updateLastSeen() {
 	session.lastSeen = time.Now()
+}
+
+func (session *ProxySession) addActiveContext(cancel context.CancelFunc) {
+	session.activeContexts.Store(cancel, struct{}{})
+}
+
+func (session *ProxySession) removeActiveContext(cancel context.CancelFunc) {
+	session.activeContexts.Delete(cancel)
+}
+
+func (session *ProxySession) cancelActiveConnections() {
+	session.activeContexts.Range(func(key, value interface{}) bool {
+		cancel := key.(context.CancelFunc)
+		cancel()
+		session.activeContexts.Delete(key)
+		return true
+	})
+}
+
+func (session *ProxySession) setLastPoolClient(client *pool.PoolClient) {
+	if session.lastPoolClient != client {
+		session.cancelActiveConnections()
+		session.lastPoolClient = client
+	}
 }

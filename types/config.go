@@ -55,6 +55,13 @@ type ProxyConfig struct {
 	BlockedPathsStr string        `envconfig:"PROXY_BLOCKED_PATHS"`
 	BlockedPaths    []string      `yaml:"blockedPaths"`
 	Auth            *AuthConfig   `yaml:"auth"`
+
+	// RebalanceInterval is how often to check for session imbalances (0 = disabled)
+	RebalanceInterval time.Duration `yaml:"rebalanceInterval"`
+	// RebalanceThreshold is the percentage difference from ideal distribution that triggers rebalancing (0-1)
+	RebalanceThreshold float64 `yaml:"rebalanceThreshold"`
+	// RebalanceMaxSweep is the maximum number of sessions to rebalance per run (0 = unlimited)
+	RebalanceMaxSweep int `yaml:"rebalanceMaxSweep"`
 }
 
 type FrontendConfig struct {

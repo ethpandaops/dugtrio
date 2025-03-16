@@ -1,9 +1,12 @@
 package proxy
 
 import (
+	"math"
 	"net/http"
 	"net/url"
 	"regexp"
+	"slices"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -95,6 +98,10 @@ func NewBeaconProxy(config *types.ProxyConfig, pool *pool.BeaconPool, proxyMetri
 		config.SessionTimeout = 10 * time.Minute
 	}
 
+	if config.RebalanceInterval > 0 {
+		go proxy.rebalanceSessionsLoop()
+	}
+
 	go proxy.cleanupSessions()
 	return &proxy, nil
 }
@@ -158,7 +165,7 @@ func (proxy *BeaconProxy) processCall(w http.ResponseWriter, r *http.Request, cl
 	}
 	if endpoint == nil || (clientType != pool.UnspecifiedClient && endpoint.GetClientType() != clientType) {
 		endpoint = proxy.pool.GetReadyEndpoint(clientType)
-		session.lastPoolClient = endpoint
+		session.setLastPoolClient(endpoint)
 	}
 	if endpoint == nil {
 		w.Header().Set("Content-Type", "text/html")
@@ -191,4 +198,96 @@ func (proxy *BeaconProxy) checkBlockedPaths(url *url.URL) bool {
 		}
 	}
 	return false
+}
+
+func (proxy *BeaconProxy) rebalanceSessionsLoop() {
+	defer utils.HandleSubroutinePanic("proxy.session.rebalance")
+
+	for {
+		time.Sleep(proxy.config.RebalanceInterval)
+		proxy.rebalanceSessions()
+	}
+}
+
+func (proxy *BeaconProxy) rebalanceSessions() {
+	canonicalFork := proxy.pool.GetCanonicalFork()
+	if canonicalFork == nil || len(canonicalFork.ReadyClients) <= 1 {
+		return
+	}
+
+	readyClients := canonicalFork.ReadyClients
+
+	// Count sessions per endpoint
+	endpointCounts := make(map[*pool.PoolClient]int)
+	proxy.sessionMutex.Lock()
+	totalSessions := 0
+	for _, session := range proxy.sessions {
+		if session.lastPoolClient != nil && slices.Contains(readyClients, session.lastPoolClient) {
+			endpointCounts[session.lastPoolClient]++
+			totalSessions++
+		}
+	}
+
+	// Calculate ideal distribution
+	idealCount := float64(totalSessions) / float64(len(readyClients))
+
+	// Check if any endpoint exceeds threshold
+	needsRebalance := false
+	var diff float64
+	for _, count := range endpointCounts {
+		diff = math.Abs(float64(count)-idealCount) / idealCount
+		if diff > proxy.config.RebalanceThreshold {
+			needsRebalance = true
+			break
+		}
+	}
+
+	// Rebalance if needed
+	if needsRebalance {
+		proxy.logger.Infof("Rebalancing sessions (threshold exceeded: ideal=%v, diff=%v)", idealCount, diff)
+
+		// Sort endpoints by session count
+		type endpointCount struct {
+			client *pool.PoolClient
+			count  int
+		}
+		counts := make([]endpointCount, 0, len(endpointCounts))
+		for client, count := range endpointCounts {
+			counts = append(counts, endpointCount{client, count})
+		}
+		sort.Slice(counts, func(i, j int) bool {
+			return counts[i].count > counts[j].count
+		})
+
+		rebalancedCount := 0
+		// Redistribute sessions from most loaded to least loaded
+		for _, session := range proxy.sessions {
+			if session.lastPoolClient == counts[0].client {
+				// Find least loaded endpoint
+				for i := len(counts) - 1; i > 0; i-- {
+					if slices.Contains(readyClients, counts[i].client) {
+						session.setLastPoolClient(counts[i].client)
+						endpointCounts[counts[0].client]--
+						counts[0].count--
+						endpointCounts[counts[i].client]++
+						counts[i].count++
+						rebalancedCount++
+						break
+					}
+				}
+
+				// Check if we've hit the rebalance limit
+				if proxy.config.RebalanceMaxSweep > 0 && rebalancedCount >= proxy.config.RebalanceMaxSweep {
+					proxy.logger.Infof("Rebalancing limit reached (%d sessions)", rebalancedCount)
+					break
+				}
+
+				sort.Slice(counts, func(i, j int) bool {
+					return counts[i].count > counts[j].count
+				})
+			}
+		}
+		proxy.logger.Infof("Rebalanced %d sessions", rebalancedCount)
+	}
+	proxy.sessionMutex.Unlock()
 }
