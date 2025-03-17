@@ -22,6 +22,7 @@ type ProxySession struct {
 	firstSeen      time.Time
 	lastSeen       time.Time
 	lastPoolClient *pool.PoolClient
+	lastRebalance  time.Time
 	requests       atomic.Uint64
 	activeContexts struct {
 		sync.Mutex
@@ -62,9 +63,10 @@ func (proxy *BeaconProxy) getSessionForRequest(r *http.Request, ident string) *P
 	session := proxy.sessions[ip]
 	if session == nil {
 		session = &ProxySession{
-			ipAddr:    ip,
-			firstSeen: time.Now(),
-			lastSeen:  time.Now(),
+			ipAddr:        ip,
+			firstSeen:     time.Now(),
+			lastSeen:      time.Now(),
+			lastRebalance: time.Now(),
 		}
 		session.init()
 		if proxy.config.CallRateLimit > 0 {

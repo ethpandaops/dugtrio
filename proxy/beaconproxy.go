@@ -219,7 +219,13 @@ func (proxy *BeaconProxy) rebalanceSessions() {
 
 	// Count sessions per endpoint
 	endpointCounts := make(map[*pool.PoolClient]int)
+	for _, client := range readyClients {
+		endpointCounts[client] = 0
+	}
+
 	proxy.sessionMutex.Lock()
+	defer proxy.sessionMutex.Unlock()
+
 	totalSessions := 0
 	for _, session := range proxy.sessions {
 		if session.lastPoolClient != nil && slices.Contains(readyClients, session.lastPoolClient) {
@@ -249,53 +255,84 @@ func (proxy *BeaconProxy) rebalanceSessions() {
 
 	// Rebalance if needed
 	if needsRebalance() {
-		proxy.logger.Infof("Rebalancing sessions (threshold exceeded: ideal=%v, diff=%v%%, abs_diff=%v)", idealCount, diff*100, absDiff)
-
-		// Sort endpoints by session count
-		type endpointCount struct {
-			client *pool.PoolClient
-			count  int
-		}
-		counts := make([]endpointCount, 0, len(endpointCounts))
-		for client, count := range endpointCounts {
-			counts = append(counts, endpointCount{client, count})
-		}
-		sort.Slice(counts, func(i, j int) bool {
-			return counts[i].count > counts[j].count
-		})
+		proxy.logger.Infof("Rebalancing sessions (threshold exceeded: ideal=%.2f, diff=%.2f%%, abs_diff=%v)", idealCount, diff*100, absDiff)
 
 		rebalancedCount := 0
-		// Redistribute sessions from most loaded to least loaded
-		for _, session := range proxy.sessions {
-			if session.lastPoolClient == counts[0].client {
-				// Find least loaded endpoint
-				for i := len(counts) - 1; i > 0; i-- {
-					if slices.Contains(readyClients, counts[i].client) {
-						session.setLastPoolClient(counts[i].client)
-						endpointCounts[counts[0].client]--
-						counts[0].count--
-						endpointCounts[counts[i].client]++
-						counts[i].count++
-						rebalancedCount++
-						break
-					}
-				}
+		rebalanceOne := func() bool {
+			// Sort endpoints by session count
+			type endpointCount struct {
+				client *pool.PoolClient
+				count  int
+			}
+			counts := make([]endpointCount, 0, len(endpointCounts))
+			for client, count := range endpointCounts {
+				counts = append(counts, endpointCount{client, count})
+			}
 
-				if !needsRebalance() {
+			if len(counts) <= 1 {
+				return false
+			}
+
+			sort.Slice(counts, func(i, j int) bool {
+				return counts[i].count > counts[j].count
+			})
+
+			var targetClient *pool.PoolClient
+			var targetCountsIndex int
+			for i := len(counts) - 1; i > 0; i-- {
+				if slices.Contains(readyClients, counts[i].client) {
+					targetClient = counts[i].client
+					targetCountsIndex = i
 					break
 				}
+			}
 
-				// Check if we've hit the rebalance limit
-				if proxy.config.RebalanceMaxSweep > 0 && rebalancedCount >= proxy.config.RebalanceMaxSweep {
-					break
+			if targetClient == nil || targetClient == counts[0].client {
+				return false
+			}
+
+			sessions := make([]*ProxySession, 0, counts[0].count)
+			for _, session := range proxy.sessions {
+				if session.lastPoolClient == counts[0].client {
+					sessions = append(sessions, session)
 				}
+			}
 
-				sort.Slice(counts, func(i, j int) bool {
-					return counts[i].count > counts[j].count
-				})
+			sort.Slice(sessions, func(i, j int) bool {
+				return sessions[i].lastRebalance.Before(sessions[j].lastRebalance)
+			})
+
+			if len(sessions) == 0 {
+				return false
+			}
+
+			session := sessions[0]
+			session.setLastPoolClient(targetClient)
+			endpointCounts[counts[0].client]--
+			counts[0].count--
+
+			endpointCounts[targetClient]++
+			counts[targetCountsIndex].count++
+
+			proxy.logger.Infof("Rebalanced session %v: %v -> %v", session.GetIpAddr(), counts[0].client.GetName(), targetClient.GetName())
+			rebalancedCount++
+			return true
+		}
+
+		for {
+			if !rebalanceOne() {
+				break
+			}
+
+			if !needsRebalance() {
+				break
+			}
+
+			if proxy.config.RebalanceMaxSweep > 0 && rebalancedCount >= proxy.config.RebalanceMaxSweep {
+				break
 			}
 		}
-		proxy.logger.Infof("Rebalanced %d sessions (threshold exceeded: ideal=%v, diff=%v%%, abs_diff=%v)", rebalancedCount, idealCount, diff*100, absDiff)
+
+		proxy.logger.Infof("Rebalanced %d sessions (threshold exceeded: ideal=%.2f, diff=%.2f%%, abs_diff=%v)", rebalancedCount, idealCount, diff*100, absDiff)
 	}
-	proxy.sessionMutex.Unlock()
 }
