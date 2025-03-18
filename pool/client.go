@@ -26,6 +26,7 @@ type PoolClient struct {
 	versionStr      string
 	clientType      ClientType
 	lastEvent       time.Time
+	lastSyncCheck   time.Time
 	retryCounter    uint64
 	lastError       error
 	headMutex       sync.RWMutex

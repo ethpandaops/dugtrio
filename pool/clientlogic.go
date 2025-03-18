@@ -62,6 +62,18 @@ func (client *PoolClient) checkPoolClient() error {
 		return fmt.Errorf("invalid node specs: %v", err)
 	}
 
+	err = client.checkSyncStatus()
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (client *PoolClient) checkSyncStatus() error {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
 	// check syncronization state
 	syncStatus, err := client.rpcClient.GetNodeSyncing(ctx)
 	if err != nil {
@@ -70,6 +82,8 @@ func (client *PoolClient) checkPoolClient() error {
 	if syncStatus == nil {
 		return fmt.Errorf("could not get synchronization status")
 	}
+
+	client.lastSyncCheck = time.Now()
 	client.updateStatus(client.isOnline, syncStatus.IsSyncing, syncStatus.IsOptimistic)
 
 	return nil
@@ -103,6 +117,13 @@ func (client *PoolClient) runPoolClient() error {
 	// process events
 	client.lastEvent = time.Now()
 	for {
+		var syncCheckTimeout time.Duration = time.Since(client.lastSyncCheck)
+		if syncCheckTimeout > 30*time.Second {
+			syncCheckTimeout = 0
+		} else {
+			syncCheckTimeout = 30*time.Second - syncCheckTimeout
+		}
+
 		var eventTimeout time.Duration = time.Since(client.lastEvent)
 		if eventTimeout > 30*time.Second {
 			eventTimeout = 0
@@ -128,6 +149,12 @@ func (client *PoolClient) runPoolClient() error {
 				} else {
 					client.logger.Debug("RPC event stream disconnected")
 				}
+			}
+		case <-time.After(syncCheckTimeout):
+			err := client.checkSyncStatus()
+			if err != nil {
+				client.updateStatus(false, client.isSyncing, client.isOptimistic)
+				return err
 			}
 		case <-time.After(eventTimeout):
 			client.logger.Debug("no head event since 30 secs, polling chain head")
