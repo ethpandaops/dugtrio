@@ -33,7 +33,7 @@
                     <td>
                       {{ if gt (len $session.ValidatorStats) 0 }}
                         <button class="btn btn-sm btn-primary" type="button" data-bs-toggle="collapse" data-bs-target="#stats{{ $session.Index }}" aria-expanded="false">
-                          Stats
+                          Details
                         </button>
                       {{ end }}
                     </td>
@@ -42,30 +42,33 @@
                     <tr>
                       <td colspan="9" class="p-0">
                         <div class="collapse" id="stats{{ $session.Index }}">
-                          <table class="table mb-0">
-                            <thead>
-                              <tr>
-                                <th>Start</th>
-                                <th>Length</th>
-                                <th>Flag</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {{ range $stat := $session.ValidatorStats }}
-                                <tr>
-                                  <td>{{ $stat.Start }}</td>
-                                  <td>{{ $stat.Length }}</td>
-                                  <td>{{ $stat.Flag }}</td>
-                                </tr>
+                          <div class="p-3">
+                            {{ range $range := $session.AggregatedRanges }}
+                              {{ if eq $range.Start $range.End }}
+                                <span class="badge bg-secondary me-1">{{ $range.Start }}</span>
+                              {{ else }}
+                                <span class="badge bg-secondary me-1">{{ $range.Start }}-{{ $range.End }}</span>
                               {{ end }}
-                            </tbody>
-                          </table>
+                            {{ end }}
+                          </div>
                         </div>
                       </td>
                     </tr>
                   {{ end }}
                 {{ end }}
               </tbody>
+              <tfoot>
+                <tr class="table-dark fw-bold">
+                  <td>-</td>
+                  <td>Totals</td>
+                  <td colspan="2">{{ .SessionCount }} clients</td>
+                  <td>{{ .TotalRequests }}</td>
+                  <td>-</td>
+                  <td>-</td>
+                  <td>{{ .TotalValidators }}</td>
+                  <td></td>
+                </tr>
+              </tfoot>
           </table>
         </div>
       </div>

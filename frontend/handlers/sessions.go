@@ -7,26 +7,34 @@ import (
 )
 
 type SessionsPage struct {
-	Sessions     []*SessionsPageSession `json:"sessions"`
-	SessionCount uint64                 `json:"session_count"`
+	Sessions        []*SessionsPageSession `json:"sessions"`
+	SessionCount    uint64                 `json:"session_count"`
+	TotalRequests   uint64                 `json:"total_requests"`
+	TotalValidators uint64                 `json:"total_validators"`
 }
 
 type SessionsPageSession struct {
-	Index          int                                 `json:"index"`
-	Key            string                              `json:"key"`
-	FirstSeen      string                              `json:"first_seen"`
-	LastSeen       string                              `json:"last_seen"`
-	Requests       uint64                              `json:"requests"`
-	Tokens         float64                             `json:"tokens"`
-	ValidatorCount uint64                              `json:"validator_count"`
-	Target         string                              `json:"target"`
-	ValidatorStats []SessionsPageSessionValidatorStats `json:"validator_stats"`
+	Index            int                                 `json:"index"`
+	Key              string                              `json:"key"`
+	FirstSeen        string                              `json:"first_seen"`
+	LastSeen         string                              `json:"last_seen"`
+	Requests         uint64                              `json:"requests"`
+	Tokens           float64                             `json:"tokens"`
+	ValidatorCount   uint64                              `json:"validator_count"`
+	Target           string                              `json:"target"`
+	ValidatorStats   []SessionsPageSessionValidatorStats `json:"validator_stats"`
+	AggregatedRanges []ValidatorRange                    `json:"aggregated_ranges"`
 }
 
 type SessionsPageSessionValidatorStats struct {
 	Start  uint64 `json:"start"`
 	Length uint32 `json:"length"`
 	Flag   uint8  `json:"flag"`
+}
+
+type ValidatorRange struct {
+	Start uint64
+	End   uint64
 }
 
 // Sessions will return the "sessions" page using a go template
@@ -48,6 +56,34 @@ func (fh *FrontendHandler) Sessions(w http.ResponseWriter, r *http.Request) {
 	if frontend.HandleTemplateError(w, r, "sessions.go", "Sessions", "", pageTemplate.ExecuteTemplate(w, "layout", data)) != nil {
 		return // an error has occurred and was processed
 	}
+}
+
+func (fh *FrontendHandler) aggregateValidatorRanges(stats []SessionsPageSessionValidatorStats) []ValidatorRange {
+	if len(stats) == 0 {
+		return nil
+	}
+
+	ranges := make([]ValidatorRange, 0)
+	current := ValidatorRange{
+		Start: stats[0].Start,
+		End:   stats[0].Start + uint64(stats[0].Length) - 1,
+	}
+
+	for i := 1; i < len(stats); i++ {
+		start := stats[i].Start
+		end := start + uint64(stats[i].Length) - 1
+
+		if start == current.End+1 {
+			// Extend current range
+			current.End = end
+		} else {
+			// Save current range and start new one
+			ranges = append(ranges, current)
+			current = ValidatorRange{Start: start, End: end}
+		}
+	}
+	ranges = append(ranges, current)
+	return ranges
 }
 
 func (fh *FrontendHandler) getSessionsPageData() (*SessionsPage, error) {
@@ -81,7 +117,10 @@ func (fh *FrontendHandler) getSessionsPageData() (*SessionsPage, error) {
 					Flag:   validator.Flag,
 				}
 			}
+			sessionData.AggregatedRanges = fh.aggregateValidatorRanges(sessionData.ValidatorStats)
 		}
+		pageData.TotalRequests += sessionData.Requests
+		pageData.TotalValidators += sessionData.ValidatorCount
 		pageData.Sessions = append(pageData.Sessions, sessionData)
 	}
 	pageData.SessionCount = uint64(len(pageData.Sessions))
