@@ -92,12 +92,29 @@ func (proxy *BeaconProxy) processProxyCall(w http.ResponseWriter, r *http.Reques
 		return fmt.Errorf("error parsing proxy url: %w", err)
 	}
 
+	reqBody := r.Body
+	if r.Method == "POST" {
+		// analyze request body for validator stats
+		switch r.URL.EscapedPath() {
+		case "/eth/v1/validator/prepare_beacon_proposer":
+			reqBody, err = proxy.analyzePrepareBeaconProposer(session, r.Body)
+			if err != nil {
+				return fmt.Errorf("error analyzing prepare beacon proposer: %w", err)
+			}
+		case "/eth/v1/validator/beacon_committee_subscriptions":
+			reqBody, err = proxy.analyzeBeaconCommitteeSubscriptions(session, r.Body)
+			if err != nil {
+				return fmt.Errorf("error analyzing beacon committee subscriptions: %w", err)
+			}
+		}
+	}
+
 	// construct request to send to origin server
 	req := &http.Request{
 		Method:        r.Method,
 		URL:           proxyUrl,
 		Header:        hh,
-		Body:          r.Body,
+		Body:          reqBody,
 		ContentLength: r.ContentLength,
 		Close:         r.Close,
 	}
