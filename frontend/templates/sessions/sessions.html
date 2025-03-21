@@ -15,6 +15,8 @@
                 <th>Requests</th>
                 <th>Tokens</th>
                 <th>Target</th>
+                <th>Validator Count</th>
+                <th></th>
               </tr>
             </thead>
               <tbody>
@@ -27,7 +29,41 @@
                     <td>{{ $session.Requests }}</td>
                     <td>{{ $session.Tokens }}</td>
                     <td>{{ $session.Target }}</td>
+                    <td>{{ $session.ValidatorCount }}</td>
+                    <td>
+                      {{ if gt (len $session.ValidatorStats) 0 }}
+                        <button class="btn btn-sm btn-primary" type="button" data-bs-toggle="collapse" data-bs-target="#stats{{ $session.Index }}" aria-expanded="false">
+                          Stats
+                        </button>
+                      {{ end }}
+                    </td>
                   </tr>
+                  {{ if gt (len $session.ValidatorStats) 0 }}
+                    <tr>
+                      <td colspan="9" class="p-0">
+                        <div class="collapse" id="stats{{ $session.Index }}">
+                          <table class="table mb-0">
+                            <thead>
+                              <tr>
+                                <th>Start</th>
+                                <th>Length</th>
+                                <th>Flag</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {{ range $stat := $session.ValidatorStats }}
+                                <tr>
+                                  <td>{{ $stat.Start }}</td>
+                                  <td>{{ $stat.Length }}</td>
+                                  <td>{{ $stat.Flag }}</td>
+                                </tr>
+                              {{ end }}
+                            </tbody>
+                          </table>
+                        </div>
+                      </td>
+                    </tr>
+                  {{ end }}
                 {{ end }}
               </tbody>
           </table>

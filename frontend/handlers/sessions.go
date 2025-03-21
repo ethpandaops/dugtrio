@@ -12,13 +12,21 @@ type SessionsPage struct {
 }
 
 type SessionsPageSession struct {
-	Index     int     `json:"index"`
-	Key       string  `json:"key"`
-	FirstSeen string  `json:"first_seen"`
-	LastSeen  string  `json:"last_seen"`
-	Requests  uint64  `json:"requests"`
-	Tokens    float64 `json:"tokens"`
-	Target    string  `json:"target"`
+	Index          int                                 `json:"index"`
+	Key            string                              `json:"key"`
+	FirstSeen      string                              `json:"first_seen"`
+	LastSeen       string                              `json:"last_seen"`
+	Requests       uint64                              `json:"requests"`
+	Tokens         float64                             `json:"tokens"`
+	ValidatorCount uint64                              `json:"validator_count"`
+	Target         string                              `json:"target"`
+	ValidatorStats []SessionsPageSessionValidatorStats `json:"validator_stats"`
+}
+
+type SessionsPageSessionValidatorStats struct {
+	Start  uint64 `json:"start"`
+	Length uint32 `json:"length"`
+	Flag   uint8  `json:"flag"`
 }
 
 // Sessions will return the "sessions" page using a go template
@@ -62,6 +70,18 @@ func (fh *FrontendHandler) getSessionsPageData() (*SessionsPage, error) {
 			sessionData.Target = lastClient.GetName()
 		}
 
+		validatorStats := session.GetValidatorStats()
+		if validatorStats != nil {
+			sessionData.ValidatorCount = validatorStats.Count
+			sessionData.ValidatorStats = make([]SessionsPageSessionValidatorStats, len(validatorStats.Validators))
+			for i, validator := range validatorStats.Validators {
+				sessionData.ValidatorStats[i] = SessionsPageSessionValidatorStats{
+					Start:  validator.Start,
+					Length: validator.Length,
+					Flag:   validator.Flag,
+				}
+			}
+		}
 		pageData.Sessions = append(pageData.Sessions, sessionData)
 	}
 	pageData.SessionCount = uint64(len(pageData.Sessions))
