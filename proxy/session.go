@@ -29,6 +29,7 @@ type ProxySession struct {
 		contexts map[uint64]context.CancelFunc
 		nextID   uint64
 	}
+	validatorStats *validatorStats
 }
 
 func (session *ProxySession) init() {
