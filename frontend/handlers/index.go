@@ -16,20 +16,21 @@ type IndexPage struct {
 
 // Index will return the "index" page using a go template
 func (fh *FrontendHandler) Index(w http.ResponseWriter, r *http.Request) {
-	var templateFiles = append(frontend.LayoutTemplateFiles,
-		"index/index.html",
-	)
-
-	var pageTemplate = frontend.GetTemplate(templateFiles...)
+	templateFiles := frontend.LayoutTemplateFiles
+	templateFiles = append(templateFiles, "index/index.html")
+	pageTemplate := frontend.GetTemplate(templateFiles...)
 	data := frontend.InitPageData(w, r, "index", "/", "Index", templateFiles)
 
 	var pageError error
+
 	data.Data, pageError = fh.getIndexPageData()
 	if pageError != nil {
 		frontend.HandlePageError(w, r, pageError)
 		return
 	}
+
 	w.Header().Set("Content-Type", "text/html")
+
 	if frontend.HandleTemplateError(w, r, "index.go", "Index", "", pageTemplate.ExecuteTemplate(w, "layout", data)) != nil {
 		return // an error has occurred and was processed
 	}

@@ -12,7 +12,7 @@ import (
 	"github.com/ethpandaops/dugtrio/types"
 )
 
-type PoolClient struct {
+type Client struct {
 	beaconPool      *BeaconPool
 	clientIdx       uint16
 	endpointConfig  *types.EndpointConfig
@@ -36,13 +36,13 @@ type PoolClient struct {
 	finalizedEpoch  phase0.Epoch
 }
 
-func (pool *BeaconPool) newPoolClient(clientIdx uint16, endpoint *types.EndpointConfig) (*PoolClient, error) {
+func (pool *BeaconPool) newPoolClient(clientIdx uint16, endpoint *types.EndpointConfig) (*Client, error) {
 	rpcClient, err := rpc.NewBeaconClient(endpoint)
 	if err != nil {
 		return nil, err
 	}
 
-	client := PoolClient{
+	client := Client{
 		beaconPool:     pool,
 		clientIdx:      clientIdx,
 		endpointConfig: endpoint,
@@ -50,55 +50,60 @@ func (pool *BeaconPool) newPoolClient(clientIdx uint16, endpoint *types.Endpoint
 		logger:         logrus.WithField("client", endpoint.Name),
 	}
 	client.resetContext()
+
 	go client.runPoolClientLoop()
+
 	return &client, nil
 }
 
-func (client *PoolClient) resetContext() {
+func (client *Client) resetContext() {
 	if client.clientCtxCancel != nil {
 		client.clientCtxCancel()
 	}
+
 	client.clientCtx, client.clientCtxCancel = context.WithCancel(context.Background())
 }
 
-func (client *PoolClient) GetIndex() uint16 {
+func (client *Client) GetIndex() uint16 {
 	return client.clientIdx
 }
 
-func (client *PoolClient) GetName() string {
+func (client *Client) GetName() string {
 	return client.endpointConfig.Name
 }
 
-func (client *PoolClient) GetVersion() string {
+func (client *Client) GetVersion() string {
 	return client.versionStr
 }
 
-func (client *PoolClient) GetEndpointConfig() *types.EndpointConfig {
+func (client *Client) GetEndpointConfig() *types.EndpointConfig {
 	return client.endpointConfig
 }
 
-func (client *PoolClient) GetLastHead() (phase0.Slot, phase0.Root) {
+func (client *Client) GetLastHead() (phase0.Slot, phase0.Root) {
 	client.headMutex.RLock()
 	defer client.headMutex.RUnlock()
+
 	return client.headSlot, client.headRoot
 }
 
-func (client *PoolClient) GetLastError() error {
+func (client *Client) GetLastError() error {
 	return client.lastError
 }
 
-func (client *PoolClient) GetLastEventTime() time.Time {
+func (client *Client) GetLastEventTime() time.Time {
 	return client.lastEvent
 }
 
-func (client *PoolClient) GetStatus() ClientStatus {
-	if client.isSyncing {
+func (client *Client) GetStatus() ClientStatus {
+	switch {
+	case client.isSyncing:
 		return ClientStatusSynchronizing
-	} else if client.isOptimistic {
+	case client.isOptimistic:
 		return ClientStatusOptimistic
-	} else if client.isOnline {
+	case client.isOnline:
 		return ClientStatusOnline
-	} else {
+	default:
 		return ClientStatusOffline
 	}
 }

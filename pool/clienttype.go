@@ -8,7 +8,7 @@ import (
 type ClientType int8
 
 var (
-	UnspecifiedClient ClientType = 0
+	UnspecifiedClient ClientType
 	UnknownClient     ClientType = -1
 	LighthouseClient  ClientType = 1
 	LodestarClient    ClientType = 2
@@ -28,7 +28,7 @@ var clientTypePatterns = map[ClientType]*regexp.Regexp{
 	CaplinClient:     regexp.MustCompile("(?i)^Caplin/.*"),
 }
 
-func (client *PoolClient) parseClientVersion(version string) {
+func (client *Client) parseClientVersion(version string) {
 	for clientType, versionPattern := range clientTypePatterns {
 		if versionPattern.MatchString(version) {
 			client.clientType = clientType
@@ -60,7 +60,7 @@ func ParseClientType(name string) ClientType {
 	}
 }
 
-func (client *PoolClient) GetClientType() ClientType {
+func (client *Client) GetClientType() ClientType {
 	return client.clientType
 }
 
