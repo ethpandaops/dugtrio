@@ -13,14 +13,14 @@ type CachedBlock struct {
 	headerMutex sync.Mutex
 	header      *phase0.SignedBeaconBlockHeader
 	seenMutex   sync.RWMutex
-	seenMap     map[uint16]*PoolClient
+	seenMap     map[uint16]*Client
 }
 
-func (block *CachedBlock) GetSeenBy() []*PoolClient {
+func (block *CachedBlock) GetSeenBy() []*Client {
 	block.seenMutex.RLock()
 	defer block.seenMutex.RUnlock()
 
-	clients := []*PoolClient{}
+	clients := []*Client{}
 	for _, client := range block.seenMap {
 		clients = append(clients, client)
 	}
@@ -32,7 +32,7 @@ func (block *CachedBlock) GetSeenBy() []*PoolClient {
 	return clients
 }
 
-func (block *CachedBlock) SetSeenBy(client *PoolClient) {
+func (block *CachedBlock) SetSeenBy(client *Client) {
 	block.seenMutex.Lock()
 	defer block.seenMutex.Unlock()
 
@@ -73,5 +73,6 @@ func (block *CachedBlock) EnsureHeader(loadHeader func() (*phase0.SignedBeaconBl
 	}
 
 	block.header = header
+
 	return nil
 }

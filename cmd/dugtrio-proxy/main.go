@@ -19,14 +19,16 @@ import (
 )
 
 func main() {
+	config := &types.Config{}
 	configPath := flag.String("config", "dugtrio-config.yaml", "Path to the config file, if empty string defaults will be used")
+
 	flag.Parse()
 
-	config := &types.Config{}
 	err := utils.ReadConfig(config, *configPath)
 	if err != nil {
 		logrus.Fatalf("error reading config file: %v", err)
 	}
+
 	logWriter := utils.InitLogger(config.Logging)
 	defer logWriter.Dispose()
 
@@ -53,7 +55,7 @@ func startDugtrio(config *types.Config) {
 	for _, endpoint := range config.Endpoints {
 		_, err := beaconPool.AddEndpoint(endpoint)
 		if err != nil {
-			logrus.Errorf("error adding endpoint %v: %v", utils.GetRedactedUrl(endpoint.Url), err)
+			logrus.Errorf("error adding endpoint %v: %v", utils.GetRedactedURL(endpoint.URL), err)
 		}
 	}
 
@@ -64,6 +66,7 @@ func startDugtrio(config *types.Config) {
 	var proxyMetrics *metrics.ProxyMetrics
 	if config.Metrics.Enabled {
 		proxyMetrics = metrics.NewProxyMetrics(beaconPool)
+
 		router.Path("/metrics").Handler(promhttp.Handler())
 	}
 
@@ -91,6 +94,7 @@ func startDugtrio(config *types.Config) {
 		// add pprof handler
 		router.PathPrefix("/debug/pprof/").Handler(http.DefaultServeMux)
 	}
+
 	if config.Frontend.Enabled {
 		frontend, err := frontend.NewFrontend(config.Frontend)
 		if err != nil {
@@ -102,26 +106,26 @@ func startDugtrio(config *types.Config) {
 		router.HandleFunc("/", frontendHandler.Index).Methods("GET")
 		router.HandleFunc("/health", frontendHandler.Health).Methods("GET")
 		router.HandleFunc("/sessions", frontendHandler.Sessions).Methods("GET")
-
 		router.PathPrefix("/").Handler(frontend)
 	}
 
 	// start http server
-	startHttpServer(config.Server, router)
+	startHTTPServer(config.Server, router)
 }
 
-func startHttpServer(config *types.ServerConfig, router *mux.Router) {
+func startHTTPServer(config *types.ServerConfig, router *mux.Router) {
 	n := negroni.New()
 	n.Use(negroni.NewRecovery())
-	//n.Use(gzip.Gzip(gzip.DefaultCompression))
 	n.UseHandler(router)
 
 	if config.Host == "" {
 		config.Host = "0.0.0.0"
 	}
+
 	if config.Port == "" {
 		config.Port = "8080"
 	}
+
 	srv := &http.Server{
 		Addr:         config.Host + ":" + config.Port,
 		WriteTimeout: config.WriteTimeout,
@@ -131,6 +135,7 @@ func startHttpServer(config *types.ServerConfig, router *mux.Router) {
 	}
 
 	logrus.Printf("http server listening on %v", srv.Addr)
+
 	go func() {
 		if err := srv.ListenAndServe(); err != nil {
 			logrus.WithError(err).Fatal("Error serving frontend")

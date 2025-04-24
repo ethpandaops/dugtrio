@@ -50,13 +50,15 @@ ctxLoop:
 			time.Sleep(10 * time.Millisecond)
 		}
 	}
+
 	callContext.cancelled = true
+
 	if callContext.streamReader != nil {
 		callContext.streamReader.Close()
 	}
 }
 
-func (proxy *BeaconProxy) processProxyCall(w http.ResponseWriter, r *http.Request, session *ProxySession, endpoint *pool.PoolClient) error {
+func (proxy *BeaconProxy) processProxyCall(w http.ResponseWriter, r *http.Request, session *Session, endpoint *pool.Client) error {
 	callContext := proxy.newProxyCallContext(r.Context(), proxy.config.CallTimeout)
 	contextID := session.addActiveContext(callContext.cancelFn)
 
@@ -80,13 +82,13 @@ func (proxy *BeaconProxy) processProxyCall(w http.ResponseWriter, r *http.Reques
 		hh.Add(hk, hv)
 	}
 
-	proxyIpChain := []string{}
+	proxyIPChain := []string{}
 	if forwaredFor := r.Header.Get("X-Forwarded-For"); forwaredFor != "" {
-		proxyIpChain = strings.Split(forwaredFor, ", ")
+		proxyIPChain = strings.Split(forwaredFor, ", ")
 	}
 
-	proxyIpChain = append(proxyIpChain, r.RemoteAddr)
-	hh.Set("X-Forwarded-For", strings.Join(proxyIpChain, ", "))
+	proxyIPChain = append(proxyIPChain, r.RemoteAddr)
+	hh.Set("X-Forwarded-For", strings.Join(proxyIPChain, ", "))
 
 	// build proxy url
 	queryArgs := ""
@@ -94,7 +96,7 @@ func (proxy *BeaconProxy) processProxyCall(w http.ResponseWriter, r *http.Reques
 		queryArgs = fmt.Sprintf("?%s", r.URL.RawQuery)
 	}
 
-	proxyUrl, err := url.Parse(fmt.Sprintf("%s%s%s", endpointConfig.Url, r.URL.EscapedPath(), queryArgs))
+	proxyURL, err := url.Parse(fmt.Sprintf("%s%s%s", endpointConfig.URL, r.URL.EscapedPath(), queryArgs))
 	if err != nil {
 		return fmt.Errorf("error parsing proxy url: %w", err)
 	}
@@ -102,7 +104,7 @@ func (proxy *BeaconProxy) processProxyCall(w http.ResponseWriter, r *http.Reques
 	// construct request to send to origin server
 	req := &http.Request{
 		Method:        r.Method,
-		URL:           proxyUrl,
+		URL:           proxyURL,
 		Header:        hh,
 		Body:          r.Body,
 		ContentLength: r.ContentLength,
@@ -143,7 +145,7 @@ func (proxy *BeaconProxy) processProxyCall(w http.ResponseWriter, r *http.Reques
 	}
 
 	respH.Set("X-Dugtrio-Version", fmt.Sprintf("dugtrio/%v", utils.GetVersion()))
-	respH.Set("X-Dugtrio-Session-Ip", session.GetIpAddr())
+	respH.Set("X-Dugtrio-Session-Ip", session.GetIPAddr())
 	respH.Set("X-Dugtrio-Session-Tokens", fmt.Sprintf("%.2f", session.getCallLimitTokens()))
 	respH.Set("X-Dugtrio-Endpoint-Name", endpoint.GetName())
 	respH.Set("X-Dugtrio-Endpoint-Type", endpoint.GetClientType().String())
@@ -180,11 +182,12 @@ func (proxy *BeaconProxy) processProxyCall(w http.ResponseWriter, r *http.Reques
 		respLen = rspLen
 	}
 
-	proxy.logger.Debugf("proxied %v %v call (ip: %v, status: %v, length: %v, endpoint: %v)", r.Method, r.URL.EscapedPath(), session.GetIpAddr(), resp.StatusCode, respLen, endpoint.GetName())
+	proxy.logger.Debugf("proxied %v %v call (ip: %v, status: %v, length: %v, endpoint: %v)", r.Method, r.URL.EscapedPath(), session.GetIPAddr(), resp.StatusCode, respLen, endpoint.GetName())
+
 	return nil
 }
 
-func (proxy *BeaconProxy) processEventStreamResponse(callContext *proxyCallContext, w http.ResponseWriter, r io.ReadCloser, session *ProxySession) (int64, error) {
+func (proxy *BeaconProxy) processEventStreamResponse(callContext *proxyCallContext, w http.ResponseWriter, r io.ReadCloser, session *Session) (int64, error) {
 	rd := bufio.NewReader(r)
 	written := int64(0)
 

@@ -10,8 +10,8 @@ import (
 type HeadFork struct {
 	Slot         phase0.Slot
 	Root         phase0.Root
-	ReadyClients []*PoolClient
-	AllClients   []*PoolClient
+	ReadyClients []*Client
+	AllClients   []*Client
 }
 
 func (pool *BeaconPool) resetHeadForkCache() {
@@ -25,12 +25,14 @@ func (pool *BeaconPool) GetCanonicalFork() *HeadFork {
 	if len(forks) == 0 {
 		return nil
 	}
+
 	return forks[0]
 }
 
 func (pool *BeaconPool) GetHeadForks() []*HeadFork {
 	pool.forkCacheMutex.Lock()
 	defer pool.forkCacheMutex.Unlock()
+
 	if pool.forkCache != nil {
 		return pool.forkCache
 	}
@@ -61,7 +63,7 @@ func (pool *BeaconPool) GetHeadForks() []*HeadFork {
 			matchingFork = &HeadFork{
 				Root:       cHeadRoot,
 				Slot:       cHeadSlot,
-				AllClients: []*PoolClient{client},
+				AllClients: []*Client{client},
 			}
 			headForks = append(headForks, matchingFork)
 		} else {
@@ -70,13 +72,13 @@ func (pool *BeaconPool) GetHeadForks() []*HeadFork {
 	}
 
 	for _, fork := range headForks {
-		fork.ReadyClients = make([]*PoolClient, 0)
+		fork.ReadyClients = make([]*Client, 0)
 		for _, client := range fork.AllClients {
 			if client.GetStatus() != ClientStatusOnline {
 				continue
 			}
 
-			var headDistance uint64 = 0
+			var headDistance uint64
 
 			_, cHeadRoot := client.GetLastHead()
 			if !bytes.Equal(fork.Root[:], cHeadRoot[:]) {
@@ -93,14 +95,16 @@ func (pool *BeaconPool) GetHeadForks() []*HeadFork {
 	sort.Slice(headForks, func(a, b int) bool {
 		countA := len(headForks[a].ReadyClients)
 		countB := len(headForks[b].ReadyClients)
+
 		return countA > countB
 	})
 
 	pool.forkCache = headForks
+
 	return headForks
 }
 
-func (fork *HeadFork) IsClientReady(client *PoolClient) bool {
+func (fork *HeadFork) IsClientReady(client *Client) bool {
 	if fork == nil {
 		return false
 	}

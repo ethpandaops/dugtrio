@@ -16,7 +16,7 @@ var (
 type BeaconPool struct {
 	config         *types.PoolConfig
 	clientCounter  uint16
-	clients        []*PoolClient
+	clients        []*Client
 	blockCache     *BlockCache
 	forkCacheMutex sync.Mutex
 	forkCache      []*HeadFork
@@ -29,7 +29,7 @@ type BeaconPool struct {
 func NewBeaconPool(config *types.PoolConfig) (*BeaconPool, error) {
 	pool := BeaconPool{
 		config:        config,
-		clients:       make([]*PoolClient, 0),
+		clients:       make([]*Client, 0),
 		rrLastIndexes: map[ClientType]uint16{},
 	}
 
@@ -46,6 +46,7 @@ func NewBeaconPool(config *types.PoolConfig) (*BeaconPool, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	return &pool, nil
 }
 
@@ -53,7 +54,7 @@ func (pool *BeaconPool) GetBlockCache() *BlockCache {
 	return pool.blockCache
 }
 
-func (pool *BeaconPool) AddEndpoint(endpoint *types.EndpointConfig) (*PoolClient, error) {
+func (pool *BeaconPool) AddEndpoint(endpoint *types.EndpointConfig) (*Client, error) {
 	clientIdx := pool.clientCounter
 	pool.clientCounter++
 
@@ -63,14 +64,15 @@ func (pool *BeaconPool) AddEndpoint(endpoint *types.EndpointConfig) (*PoolClient
 	}
 
 	pool.clients = append(pool.clients, client)
+
 	return client, nil
 }
 
-func (pool *BeaconPool) GetAllEndpoints() []*PoolClient {
+func (pool *BeaconPool) GetAllEndpoints() []*Client {
 	return pool.clients
 }
 
-func (pool *BeaconPool) GetReadyEndpoint(clientType ClientType) *PoolClient {
+func (pool *BeaconPool) GetReadyEndpoint(clientType ClientType) *Client {
 	canonicalFork := pool.GetCanonicalFork()
 	if canonicalFork == nil {
 		return nil
@@ -80,12 +82,13 @@ func (pool *BeaconPool) GetReadyEndpoint(clientType ClientType) *PoolClient {
 	if len(readyClients) == 0 {
 		return nil
 	}
+
 	selectedClient := pool.runClientScheduler(readyClients, clientType)
 
 	return selectedClient
 }
 
-func (pool *BeaconPool) IsClientReady(client *PoolClient) bool {
+func (pool *BeaconPool) IsClientReady(client *Client) bool {
 	if client == nil {
 		return false
 	}
@@ -101,16 +104,16 @@ func (pool *BeaconPool) IsClientReady(client *PoolClient) bool {
 			return true
 		}
 	}
+
 	return false
 }
 
-func (pool *BeaconPool) runClientScheduler(readyClients []*PoolClient, clientType ClientType) *PoolClient {
+func (pool *BeaconPool) runClientScheduler(readyClients []*Client, clientType ClientType) *Client {
 	pool.schedulerMutex.Lock()
 	defer pool.schedulerMutex.Unlock()
 
-	switch pool.schedulerMode {
-	case RoundRobinScheduler:
-		var firstReadyClient *PoolClient
+	if pool.schedulerMode == RoundRobinScheduler {
+		var firstReadyClient *Client
 
 		for _, client := range readyClients {
 			if clientType != UnspecifiedClient && clientType != client.clientType {
@@ -129,10 +132,11 @@ func (pool *BeaconPool) runClientScheduler(readyClients []*PoolClient, clientTyp
 
 		if firstReadyClient == nil {
 			return nil
-		} else {
-			pool.rrLastIndexes[clientType] = firstReadyClient.clientIdx
-			return firstReadyClient
 		}
+
+		pool.rrLastIndexes[clientType] = firstReadyClient.clientIdx
+
+		return firstReadyClient
 	}
 
 	return readyClients[0]

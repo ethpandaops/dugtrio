@@ -12,8 +12,8 @@ import (
 	"github.com/ethpandaops/dugtrio/utils"
 )
 
-func (client *PoolClient) runPoolClientLoop() {
-	defer utils.HandleSubroutinePanic("runUpstreamClientLoop")
+func (client *Client) runPoolClientLoop() {
+	defer utils.HandleSubroutinePanic("Client.runPoolClientLoop", client.runPoolClientLoop)
 
 	for {
 		err := client.checkPoolClient()
@@ -21,6 +21,7 @@ func (client *PoolClient) runPoolClientLoop() {
 		if err == nil {
 			err = client.runPoolClient()
 		}
+
 		if err == nil {
 			client.retryCounter = 0
 			return
@@ -35,7 +36,7 @@ func (client *PoolClient) runPoolClientLoop() {
 	}
 }
 
-func (client *PoolClient) checkPoolClient() error {
+func (client *Client) checkPoolClient() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
@@ -49,7 +50,9 @@ func (client *PoolClient) checkPoolClient() error {
 	if err != nil {
 		return fmt.Errorf("error while fetching node version: %v", err)
 	}
+
 	client.versionStr = nodeVersion
+
 	client.parseClientVersion(nodeVersion)
 
 	// get & comare chain specs
@@ -57,6 +60,7 @@ func (client *PoolClient) checkPoolClient() error {
 	if err != nil {
 		return fmt.Errorf("error while fetching specs: %v", err)
 	}
+
 	err = client.beaconPool.blockCache.SetClientSpecs(specs)
 	if err != nil {
 		return fmt.Errorf("invalid node specs: %v", err)
@@ -70,15 +74,16 @@ func (client *PoolClient) checkPoolClient() error {
 	return nil
 }
 
-func (client *PoolClient) checkSyncStatus() error {
+func (client *Client) checkSyncStatus() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	// check syncronization state
+	// check synchronization state
 	syncStatus, err := client.rpcClient.GetNodeSyncing(ctx)
 	if err != nil {
 		return fmt.Errorf("error while fetching synchronization status: %v", err)
 	}
+
 	if syncStatus == nil {
 		return fmt.Errorf("could not get synchronization status")
 	}
@@ -89,7 +94,7 @@ func (client *PoolClient) checkSyncStatus() error {
 	return nil
 }
 
-func (client *PoolClient) runPoolClient() error {
+func (client *Client) runPoolClient() error {
 	// get latest header
 	err := client.pollClientHead()
 	if err != nil {
@@ -100,12 +105,14 @@ func (client *PoolClient) runPoolClient() error {
 	if client.isSyncing {
 		return fmt.Errorf("beacon node is synchronizing")
 	}
+
 	if client.isOptimistic {
 		return fmt.Errorf("beacon node is optimistic")
 	}
 
 	specs := client.beaconPool.blockCache.GetSpecs()
 	finalizedEpoch, _ := client.beaconPool.blockCache.GetFinalizedCheckpoint()
+
 	if client.headSlot < phase0.Slot(finalizedEpoch)*phase0.Slot(specs.SlotsPerEpoch) {
 		return fmt.Errorf("beacon node is behind finalized checkpoint (node head: %v, finalized: %v)", client.headSlot, phase0.Slot(finalizedEpoch)*phase0.Slot(specs.SlotsPerEpoch))
 	}
@@ -118,14 +125,14 @@ func (client *PoolClient) runPoolClient() error {
 	client.lastEvent = time.Now()
 
 	for {
-		var syncCheckTimeout time.Duration = time.Since(client.lastSyncCheck)
+		syncCheckTimeout := time.Since(client.lastSyncCheck)
 		if syncCheckTimeout > 30*time.Second {
 			syncCheckTimeout = 0
 		} else {
 			syncCheckTimeout = 30*time.Second - syncCheckTimeout
 		}
 
-		var eventTimeout time.Duration = time.Since(client.lastEvent)
+		eventTimeout := time.Since(client.lastEvent)
 		if eventTimeout > 30*time.Second {
 			eventTimeout = 0
 		} else {
@@ -137,9 +144,27 @@ func (client *PoolClient) runPoolClient() error {
 
 			switch evt.Event {
 			case rpc.StreamBlockEvent:
-				client.processBlockEvent(evt.Data.(*v1.BlockEvent))
+				blockEvent, ok := evt.Data.(*v1.BlockEvent)
+				if !ok {
+					client.logger.Warnf("invalid block event: %v", evt.Data)
+					continue
+				}
+
+				err = client.processBlockEvent(blockEvent)
+				if err != nil {
+					client.logger.Warnf("error processing block event: %v", err)
+				}
 			case rpc.StreamFinalizedEvent:
-				client.processFinalizedEvent(evt.Data.(*v1.FinalizedCheckpointEvent))
+				checkpointEvent, ok := evt.Data.(*v1.FinalizedCheckpointEvent)
+				if !ok {
+					client.logger.Warnf("invalid finalized checkpoint event: %v", evt.Data)
+					continue
+				}
+
+				err = client.processFinalizedEvent(checkpointEvent)
+				if err != nil {
+					client.logger.Warnf("error processing finalized event: %v", err)
+				}
 			}
 
 			client.logger.Tracef("event (%v) processing time: %v ms", evt.Event, time.Since(now).Milliseconds())
@@ -147,6 +172,7 @@ func (client *PoolClient) runPoolClient() error {
 		case ready := <-blockStream.ReadyChan:
 			if client.isOnline != ready {
 				client.updateStatus(ready, client.isSyncing, client.isOptimistic)
+
 				if ready {
 					client.logger.Debug("RPC event stream connected")
 				} else {
@@ -173,7 +199,7 @@ func (client *PoolClient) runPoolClient() error {
 	}
 }
 
-func (client *PoolClient) updateStatus(online bool, syncing bool, optimistic bool) {
+func (client *Client) updateStatus(online, syncing, optimistic bool) {
 	oldStatus := client.GetStatus()
 
 	client.isOnline = online
@@ -187,7 +213,7 @@ func (client *PoolClient) updateStatus(online bool, syncing bool, optimistic boo
 	}
 }
 
-func (client *PoolClient) processBlockEvent(evt *v1.BlockEvent) error {
+func (client *Client) processBlockEvent(evt *v1.BlockEvent) error {
 	currentBlock, isNewBlock := client.beaconPool.blockCache.AddBlock(evt.Block, evt.Slot)
 	if currentBlock != nil {
 		if isNewBlock {
@@ -223,13 +249,14 @@ func (client *PoolClient) processBlockEvent(evt *v1.BlockEvent) error {
 	return nil
 }
 
-func (client *PoolClient) processFinalizedEvent(evt *v1.FinalizedCheckpointEvent) error {
+func (client *Client) processFinalizedEvent(evt *v1.FinalizedCheckpointEvent) error {
 	client.logger.Debugf("received finalization_checkpoint event: finalized %v [0x%x]", evt.Epoch, evt.Block)
 	client.setFinalizedHead(evt.Epoch, evt.Block)
+
 	return nil
 }
 
-func (client *PoolClient) pollClientHead() error {
+func (client *Client) pollClientHead() error {
 	ctx, cancel := context.WithTimeout(client.clientCtx, 10*time.Second)
 	defer cancel()
 
@@ -237,21 +264,27 @@ func (client *PoolClient) pollClientHead() error {
 	if err != nil {
 		return fmt.Errorf("could not get latest header: %v", err)
 	}
+
 	if latestHeader == nil {
 		return fmt.Errorf("could not find latest header")
 	}
-	client.setHeader(latestHeader.Root, latestHeader.Header)
+
+	err = client.setHeader(latestHeader.Root, latestHeader.Header)
+	if err != nil {
+		return fmt.Errorf("could not set header: %v", err)
+	}
 
 	finalityCheckpoint, err := client.rpcClient.GetFinalityCheckpoints(ctx)
 	if err != nil {
 		return fmt.Errorf("could not get finality checkpoint: %v", err)
 	}
+
 	client.setFinalizedHead(finalityCheckpoint.Finalized.Epoch, finalityCheckpoint.Finalized.Root)
 
 	return nil
 }
 
-func (client *PoolClient) setHeader(root phase0.Root, header *phase0.SignedBeaconBlockHeader) error {
+func (client *Client) setHeader(root phase0.Root, header *phase0.SignedBeaconBlockHeader) error {
 	cachedBlock, _ := client.beaconPool.blockCache.AddBlock(root, header.Message.Slot)
 	if cachedBlock != nil {
 		cachedBlock.SetHeader(header)
@@ -259,30 +292,31 @@ func (client *PoolClient) setHeader(root phase0.Root, header *phase0.SignedBeaco
 	}
 
 	client.headMutex.Lock()
+
 	if bytes.Equal(client.headRoot[:], root[:]) {
 		client.headMutex.Unlock()
 		return nil
 	}
+
 	client.headSlot = header.Message.Slot
 	client.headRoot = root
-	client.headMutex.Unlock()
 
+	client.headMutex.Unlock()
 	client.beaconPool.resetHeadForkCache()
 
 	return nil
 }
 
-func (client *PoolClient) setFinalizedHead(epoch phase0.Epoch, root phase0.Root) error {
+func (client *Client) setFinalizedHead(epoch phase0.Epoch, root phase0.Root) {
 	client.headMutex.Lock()
+
 	if bytes.Equal(client.finalizedRoot[:], root[:]) {
 		client.headMutex.Unlock()
-		return nil
 	}
+
 	client.finalizedEpoch = epoch
 	client.finalizedRoot = root
+
 	client.headMutex.Unlock()
-
 	client.beaconPool.blockCache.SetFinalizedCheckpoint(epoch, root)
-
-	return nil
 }

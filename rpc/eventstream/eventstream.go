@@ -18,7 +18,7 @@ import (
 type Stream struct {
 	c           *http.Client
 	req         *http.Request
-	lastEventId string
+	lastEventID string
 	retry       time.Duration
 	// Events emits the events received by the stream
 	Events chan StreamEvent
@@ -59,28 +59,28 @@ func (e SubscriptionError) Error() string {
 
 // Subscribe to the Events emitted from the specified url.
 // If lastEventId is non-empty it will be sent to the server in case it can replay missed events.
-func Subscribe(url, lastEventId string) (*Stream, error) {
-	req, err := http.NewRequest("GET", url, nil)
+func Subscribe(url, lastEventID string) (*Stream, error) {
+	req, err := http.NewRequest("GET", url, http.NoBody)
 	if err != nil {
 		return nil, err
 	}
 
-	return SubscribeWithRequest(lastEventId, req)
+	return SubscribeWithRequest(lastEventID, req)
 }
 
 // SubscribeWithRequest will take an http.Request to setup the stream, allowing custom headers
 // to be specified, authentication to be configured, etc.
-func SubscribeWithRequest(lastEventId string, request *http.Request) (*Stream, error) {
-	return SubscribeWith(lastEventId, http.DefaultClient, request)
+func SubscribeWithRequest(lastEventID string, request *http.Request) (*Stream, error) {
+	return SubscribeWith(lastEventID, http.DefaultClient, request)
 }
 
 // SubscribeWith takes a http client and request providing customization over both headers and
 // control over the http client settings (timeouts, tls, etc)
-func SubscribeWith(lastEventId string, client *http.Client, request *http.Request) (*Stream, error) {
+func SubscribeWith(lastEventID string, client *http.Client, request *http.Request) (*Stream, error) {
 	stream := &Stream{
 		c:           client,
 		req:         request,
-		lastEventId: lastEventId,
+		lastEventID: lastEventID,
 		retry:       time.Millisecond * 3000,
 		Events:      make(chan StreamEvent),
 		Errors:      make(chan error, 10),
@@ -136,8 +136,8 @@ func (stream *Stream) connect() (r io.ReadCloser, err error) {
 	stream.req.Header.Set("Cache-Control", "no-cache")
 	stream.req.Header.Set("Accept", "text/event-stream")
 
-	if len(stream.lastEventId) > 0 {
-		stream.req.Header.Set("Last-Event-ID", stream.lastEventId)
+	if stream.lastEventID != "" {
+		stream.req.Header.Set("Last-Event-ID", stream.lastEventID)
 	}
 
 	if resp, err = stream.c.Do(stream.req); err != nil {
@@ -192,14 +192,18 @@ func (stream *Stream) receiveEvents(r io.ReadCloser) {
 
 		stream.closeMutex.Unlock()
 
-		pub := ev.(StreamEvent)
+		pub, ok := ev.(StreamEvent)
+		if !ok {
+			stream.Errors <- fmt.Errorf("invalid event type: %T", ev)
+			continue
+		}
 
 		if pub.Retry() > 0 {
 			stream.retry = time.Duration(pub.Retry()) * time.Millisecond
 		}
 
-		if len(pub.Id()) > 0 {
-			stream.lastEventId = pub.Id()
+		if pub.Id() != "" {
+			stream.lastEventID = pub.Id()
 		}
 
 		stream.Events <- pub

@@ -9,6 +9,7 @@ import (
 	"github.com/ethpandaops/dugtrio/pool"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	"github.com/sirupsen/logrus"
 )
 
 type ProxyMetrics struct {
@@ -55,12 +56,32 @@ func NewProxyMetrics(beaconPool *pool.BeaconPool) *ProxyMetrics {
 		),
 	}
 
-	prometheus.Register(proxyMetrics.totalCalls)
-	prometheus.Register(proxyMetrics.clientCalls)
-	prometheus.Register(proxyMetrics.pathCalls)
-	prometheus.Register(proxyMetrics.callDuration)
-	prometheus.Register(proxyMetrics.callStatus)
-	prometheus.Register(prometheus.NewGaugeFunc(
+	err := prometheus.Register(proxyMetrics.totalCalls)
+	if err != nil {
+		logrus.Errorf("error registering total calls metric: %v", err)
+	}
+
+	err = prometheus.Register(proxyMetrics.clientCalls)
+	if err != nil {
+		logrus.Errorf("error registering client calls metric: %v", err)
+	}
+
+	err = prometheus.Register(proxyMetrics.pathCalls)
+	if err != nil {
+		logrus.Errorf("error registering path calls metric: %v", err)
+	}
+
+	err = prometheus.Register(proxyMetrics.callDuration)
+	if err != nil {
+		logrus.Errorf("error registering call duration metric: %v", err)
+	}
+
+	err = prometheus.Register(proxyMetrics.callStatus)
+	if err != nil {
+		logrus.Errorf("error registering call status metric: %v", err)
+	}
+
+	err = prometheus.Register(prometheus.NewGaugeFunc(
 		prometheus.GaugeOpts{
 			Name: "dugtrio_pool_online",
 			Help: "Number of online clients in the node pool.",
@@ -70,15 +91,19 @@ func NewProxyMetrics(beaconPool *pool.BeaconPool) *ProxyMetrics {
 			if canonicalFork == nil {
 				return 0
 			}
+
 			return float64(len(canonicalFork.ReadyClients))
 		},
 	))
+	if err != nil {
+		logrus.Errorf("error registering pool online metric: %v", err)
+	}
 
 	return proxyMetrics
 }
 
-func (proxyMetrics *ProxyMetrics) AddCall(clientName string, apiPath string, callDuration time.Duration, callStatus int) {
-	trimmedPath := proxyMetrics.trimApiPath(apiPath)
+func (proxyMetrics *ProxyMetrics) AddCall(clientName, apiPath string, callDuration time.Duration, callStatus int) {
+	trimmedPath := proxyMetrics.trimAPIPath(apiPath)
 
 	proxyMetrics.totalCalls.Inc()
 	proxyMetrics.clientCalls.With(prometheus.Labels{
@@ -98,7 +123,7 @@ func (proxyMetrics *ProxyMetrics) AddCall(clientName string, apiPath string, cal
 	}).Inc()
 }
 
-func (proxyMetrics *ProxyMetrics) trimApiPath(apiPath string) string {
+func (proxyMetrics *ProxyMetrics) trimAPIPath(apiPath string) string {
 	if queryPos := strings.Index(apiPath, "?"); queryPos > -1 {
 		apiPath = apiPath[:queryPos]
 	}

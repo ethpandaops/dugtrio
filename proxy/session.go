@@ -16,12 +16,12 @@ import (
 	"golang.org/x/time/rate"
 )
 
-type ProxySession struct {
+type Session struct {
 	ipAddr         string
 	limiter        *rate.Limiter
 	firstSeen      time.Time
 	lastSeen       time.Time
-	lastPoolClient *pool.PoolClient
+	lastPoolClient *pool.Client
 	lastRebalance  time.Time
 	requests       atomic.Uint64
 	activeContexts struct {
@@ -31,22 +31,25 @@ type ProxySession struct {
 	}
 }
 
-func (session *ProxySession) init() {
+func (session *Session) init() {
 	session.activeContexts.contexts = make(map[uint64]context.CancelFunc)
 }
 
-func (proxy *BeaconProxy) getSessionForRequest(r *http.Request, ident string) *ProxySession {
+func (proxy *BeaconProxy) getSessionForRequest(r *http.Request, ident string) *Session {
 	var ip string
 
 	if proxy.config.ProxyCount > 0 {
 		forwardIps := strings.Split(r.Header.Get("X-Forwarded-For"), ",")
-		forwardIdx := len(forwardIps) - int(proxy.config.ProxyCount)
+
+		forwardIdx := len(forwardIps) - proxy.config.ProxyCount
 		if forwardIdx >= 0 {
 			ip = strings.Trim(forwardIps[forwardIdx], " ")
 		}
 	}
+
 	if ip == "" {
 		var err error
+
 		ip, _, err = net.SplitHostPort(r.RemoteAddr)
 		if err != nil {
 			return nil
@@ -62,28 +65,31 @@ func (proxy *BeaconProxy) getSessionForRequest(r *http.Request, ident string) *P
 
 	session := proxy.sessions[ip]
 	if session == nil {
-		session = &ProxySession{
+		session = &Session{
 			ipAddr:        ip,
 			firstSeen:     time.Now(),
 			lastSeen:      time.Now(),
 			lastRebalance: time.Now(),
 		}
 		session.init()
+
 		if proxy.config.CallRateLimit > 0 {
-			session.limiter = rate.NewLimiter(rate.Limit(proxy.config.CallRateLimit), int(proxy.config.CallRateBurst))
+			session.limiter = rate.NewLimiter(rate.Limit(proxy.config.CallRateLimit), proxy.config.CallRateBurst)
 		}
+
 		proxy.sessions[ip] = session
 	} else {
 		session.lastSeen = time.Now()
 	}
+
 	return session
 }
 
-func (proxy *BeaconProxy) GetSessions() []*ProxySession {
+func (proxy *BeaconProxy) GetSessions() []*Session {
 	proxy.sessionMutex.Lock()
 	defer proxy.sessionMutex.Unlock()
 
-	sessions := []*ProxySession{}
+	sessions := []*Session{}
 	for _, session := range proxy.sessions {
 		sessions = append(sessions, session)
 	}
@@ -91,90 +97,98 @@ func (proxy *BeaconProxy) GetSessions() []*ProxySession {
 	sort.Slice(sessions, func(a, b int) bool {
 		return sessions[b].firstSeen.After(sessions[a].firstSeen)
 	})
+
 	return sessions
 }
 
 func (proxy *BeaconProxy) cleanupSessions() {
-	defer utils.HandleSubroutinePanic("proxy.session.cleanup")
+	defer utils.HandleSubroutinePanic("proxy.session.cleanup", proxy.cleanupSessions)
 
 	for {
 		time.Sleep(time.Minute)
 
 		proxy.sessionMutex.Lock()
+
 		for ip, session := range proxy.sessions {
 			if time.Since(session.lastSeen) > proxy.config.SessionTimeout {
 				delete(proxy.sessions, ip)
 			}
 		}
+
 		proxy.sessionMutex.Unlock()
 	}
 }
 
-func (session *ProxySession) checkCallLimit(callCost uint) error {
+func (session *Session) checkCallLimit(callCost int) error {
 	if session.limiter == nil {
 		return nil
 	}
-	if !session.limiter.AllowN(time.Now(), int(callCost)) {
+
+	if !session.limiter.AllowN(time.Now(), callCost) {
 		return fmt.Errorf("call rate limit exceeded")
 	}
+
 	return nil
 }
 
-func (session *ProxySession) getCallLimitTokens() float64 {
+func (session *Session) getCallLimitTokens() float64 {
 	if session.limiter == nil {
 		return 0
 	}
+
 	return session.limiter.Tokens()
 }
 
-func (session *ProxySession) GetIpAddr() string {
+func (session *Session) GetIPAddr() string {
 	return session.ipAddr
 }
 
-func (session *ProxySession) GetFirstSeen() time.Time {
+func (session *Session) GetFirstSeen() time.Time {
 	return session.firstSeen
 }
 
-func (session *ProxySession) GetLastSeen() time.Time {
+func (session *Session) GetLastSeen() time.Time {
 	return session.lastSeen
 }
 
-func (session *ProxySession) GetLastPoolClient() *pool.PoolClient {
+func (session *Session) GetLastPoolClient() *pool.Client {
 	return session.lastPoolClient
 }
 
-func (session *ProxySession) GetRequests() uint64 {
+func (session *Session) GetRequests() uint64 {
 	return session.requests.Load()
 }
 
-func (session *ProxySession) GetLimiterTokens() float64 {
+func (session *Session) GetLimiterTokens() float64 {
 	if session.limiter == nil {
 		return 0
 	}
+
 	return session.limiter.Tokens()
 }
 
-func (session *ProxySession) updateLastSeen() {
+func (session *Session) updateLastSeen() {
 	session.lastSeen = time.Now()
 }
 
-func (session *ProxySession) addActiveContext(cancel context.CancelFunc) uint64 {
+func (session *Session) addActiveContext(cancel context.CancelFunc) uint64 {
 	session.activeContexts.Lock()
 	defer session.activeContexts.Unlock()
 
 	id := session.activeContexts.nextID
 	session.activeContexts.nextID++
 	session.activeContexts.contexts[id] = cancel
+
 	return id
 }
 
-func (session *ProxySession) removeActiveContext(id uint64) {
+func (session *Session) removeActiveContext(id uint64) {
 	session.activeContexts.Lock()
 	defer session.activeContexts.Unlock()
 	delete(session.activeContexts.contexts, id)
 }
 
-func (session *ProxySession) cancelActiveConnections() {
+func (session *Session) cancelActiveConnections() {
 	session.activeContexts.Lock()
 	defer session.activeContexts.Unlock()
 
@@ -184,7 +198,7 @@ func (session *ProxySession) cancelActiveConnections() {
 	}
 }
 
-func (session *ProxySession) setLastPoolClient(client *pool.PoolClient) {
+func (session *Session) setLastPoolClient(client *pool.Client) {
 	if session.lastPoolClient != client {
 		session.cancelActiveConnections()
 		session.lastPoolClient = client

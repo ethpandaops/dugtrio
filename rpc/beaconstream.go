@@ -69,7 +69,7 @@ func (bs *BeaconStream) Close() {
 	}
 
 	bs.runMutex.Lock()
-	defer bs.runMutex.Unlock()
+	defer bs.runMutex.Unlock() //nolint:gocritic // no need to defer
 }
 
 func (bs *BeaconStream) startStream() {
@@ -84,11 +84,12 @@ func (bs *BeaconStream) startStream() {
 		for running {
 			select {
 			case evt := <-stream.Events:
-				if evt.Event() == "block" {
+				switch evt.Event() {
+				case "block":
 					bs.processBlockEvent(evt)
-				} else if evt.Event() == "head" {
+				case "head":
 					bs.processHeadEvent(evt)
-				} else if evt.Event() == "finalized_checkpoint" {
+				case "finalized_checkpoint":
 					bs.processFinalizedEvent(evt)
 				}
 			case <-bs.killChan:
@@ -149,7 +150,7 @@ func (bs *BeaconStream) subscribeStream(endpoint string, events uint16) *eventst
 
 		url := fmt.Sprintf("%s/eth/v1/events?topics=%v", endpoint, topics.String())
 
-		req, err := http.NewRequest("GET", url, nil)
+		req, err := http.NewRequest("GET", url, http.NoBody)
 		if err == nil {
 			for headerKey, headerVal := range bs.client.headers {
 				req.Header.Set(headerKey, headerVal)
@@ -159,7 +160,7 @@ func (bs *BeaconStream) subscribeStream(endpoint string, events uint16) *eventst
 		}
 
 		if err != nil {
-			logger.WithField("client", bs.client.name).Warnf("Error while subscribing beacon event stream %v: %v", utils.GetRedactedUrl(url), err)
+			logger.WithField("client", bs.client.name).Warnf("Error while subscribing beacon event stream %v: %v", utils.GetRedactedURL(url), err)
 			select {
 			case <-bs.killChan:
 				return nil

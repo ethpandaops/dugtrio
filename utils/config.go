@@ -17,9 +17,12 @@ func ReadConfig(cfg *types.Config, path string) error {
 		return err
 	}
 
-	readConfigEnv(cfg)
+	err = readConfigEnv(cfg)
+	if err != nil {
+		return err
+	}
 
-	if cfg.Endpoints == nil || len(cfg.Endpoints) == 0 {
+	if len(cfg.Endpoints) == 0 {
 		return fmt.Errorf("missing beacon node endpoints (need at least 1 endpoint)")
 	}
 

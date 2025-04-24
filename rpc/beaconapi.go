@@ -2,7 +2,6 @@ package rpc
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
@@ -29,14 +28,12 @@ type BeaconClient struct {
 func NewBeaconClient(endpointCfg *types.EndpointConfig) (*BeaconClient, error) {
 	client := &BeaconClient{
 		name:     endpointCfg.Name,
-		endpoint: endpointCfg.Url,
+		endpoint: endpointCfg.URL,
 		headers:  endpointCfg.Headers,
 	}
 
 	return client, nil
 }
-
-var errNotFound = errors.New("not found 404")
 
 func (bc *BeaconClient) Initialize(ctx context.Context) error {
 	if bc.clientSvc != nil {
@@ -47,12 +44,10 @@ func (bc *BeaconClient) Initialize(ctx context.Context) error {
 		http.WithAddress(bc.endpoint),
 		http.WithTimeout(10 * time.Minute),
 		http.WithLogLevel(zerolog.Disabled),
-		// TODO (when upstream PR is merged)
-		//http.WithConnectionCheck(false),
 	}
 
 	// set extra endpoint headers
-	if bc.headers != nil && len(bc.headers) > 0 {
+	if len(bc.headers) > 0 {
 		cliParams = append(cliParams, http.WithExtraHeaders(bc.headers))
 	}
 
@@ -95,12 +90,6 @@ func (bc *BeaconClient) GetNodeSyncing(ctx context.Context) (*v1.SyncState, erro
 	}
 
 	return result, nil
-}
-
-type apiNodeVersion struct {
-	Data struct {
-		Version string `json:"version"`
-	} `json:"data"`
 }
 
 func (bc *BeaconClient) GetNodeVersion(ctx context.Context) (string, error) {

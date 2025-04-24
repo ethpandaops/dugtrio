@@ -87,7 +87,7 @@ func InitLogger(config *types.LoggingConfig) *LogWriter {
 
 		logrus.Printf("logging to file: %v (%v)\n", config.FilePath, fileLevel)
 
-		f, err := os.OpenFile(config.FilePath, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644)
+		f, err := os.OpenFile(config.FilePath, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0o644)
 		if err != nil {
 			fmt.Println("Failed to create logfile" + config.FilePath)
 			panic(err)
@@ -111,7 +111,8 @@ func (logWriter *LogWriter) Dispose() {
 }
 
 func getLogLevels(level logrus.Level) []logrus.Level {
-	if level == logrus.TraceLevel {
+	switch level {
+	case logrus.TraceLevel:
 		return []logrus.Level{
 			logrus.PanicLevel,
 			logrus.FatalLevel,
@@ -121,7 +122,7 @@ func getLogLevels(level logrus.Level) []logrus.Level {
 			logrus.DebugLevel,
 			logrus.TraceLevel,
 		}
-	} else if level == logrus.DebugLevel {
+	case logrus.DebugLevel:
 		return []logrus.Level{
 			logrus.PanicLevel,
 			logrus.FatalLevel,
@@ -130,7 +131,7 @@ func getLogLevels(level logrus.Level) []logrus.Level {
 			logrus.InfoLevel,
 			logrus.DebugLevel,
 		}
-	} else if level == logrus.InfoLevel {
+	case logrus.InfoLevel:
 		return []logrus.Level{
 			logrus.PanicLevel,
 			logrus.FatalLevel,
@@ -138,31 +139,31 @@ func getLogLevels(level logrus.Level) []logrus.Level {
 			logrus.WarnLevel,
 			logrus.InfoLevel,
 		}
-	} else if level == logrus.WarnLevel {
+	case logrus.WarnLevel:
 		return []logrus.Level{
 			logrus.PanicLevel,
 			logrus.FatalLevel,
 			logrus.ErrorLevel,
 			logrus.WarnLevel,
 		}
-	} else if level == logrus.ErrorLevel {
+	case logrus.ErrorLevel:
 		return []logrus.Level{
 			logrus.PanicLevel,
 			logrus.FatalLevel,
 			logrus.ErrorLevel,
 		}
-	} else if level == logrus.FatalLevel {
+	case logrus.FatalLevel:
 		return []logrus.Level{
 			logrus.PanicLevel,
 			logrus.FatalLevel,
 		}
-	} else if level == logrus.PanicLevel {
+	case logrus.PanicLevel:
 		return []logrus.Level{
 			logrus.PanicLevel,
 		}
-	} else {
-		return []logrus.Level{}
 	}
+
+	return []logrus.Level{}
 }
 
 func parseLogLevel(level string) logrus.Level {
@@ -282,7 +283,7 @@ func logErrorInfo(err error, callerSkip int, additionalInfos ...map[string]inter
 	return logFields
 }
 
-func GetRedactedUrl(requrl string) string {
+func GetRedactedURL(requrl string) string {
 	var logurl string
 
 	urlData, _ := url.Parse(requrl)
