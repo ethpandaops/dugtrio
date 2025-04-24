@@ -18,5 +18,6 @@ func WaitForCtrlC() {
 func HandleSubroutinePanic(identifier string) {
 	if err := recover(); err != nil {
 		logrus.WithError(err.(error)).Errorf("uncaught panic in %v subroutine: %v, stack: %v", identifier, err, string(debug.Stack()))
+		panic(err)
 	}
 }
