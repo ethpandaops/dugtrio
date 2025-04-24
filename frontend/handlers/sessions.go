@@ -83,7 +83,9 @@ func (fh *FrontendHandler) aggregateValidatorRanges(stats []SessionsPageSessionV
 			current = ValidatorRange{Start: start, End: end}
 		}
 	}
+
 	ranges = append(ranges, current)
+
 	return ranges
 }
 
@@ -112,6 +114,7 @@ func (fh *FrontendHandler) getSessionsPageData() (*SessionsPage, error) {
 		if validatorStats != nil {
 			sessionData.ValidatorCount = validatorStats.Count
 			sessionData.ValidatorStats = make([]SessionsPageSessionValidatorStats, len(validatorStats.Validators))
+
 			for i, validator := range validatorStats.Validators {
 				sessionData.ValidatorStats[i] = SessionsPageSessionValidatorStats{
 					Start:  validator.Start,
@@ -119,8 +122,10 @@ func (fh *FrontendHandler) getSessionsPageData() (*SessionsPage, error) {
 					Flag:   validator.Flag,
 				}
 			}
+
 			sessionData.AggregatedRanges = fh.aggregateValidatorRanges(sessionData.ValidatorStats)
 		}
+
 		pageData.TotalRequests += sessionData.Requests
 		pageData.TotalValidators += sessionData.ValidatorCount
 		pageData.Sessions = append(pageData.Sessions, sessionData)

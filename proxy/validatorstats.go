@@ -24,25 +24,30 @@ type ValidatorSlice struct {
 	Flag   uint8
 }
 
-func (session *ProxySession) GetValidatorStats() *ValidatorStats {
+func (session *Session) GetValidatorStats() *ValidatorStats {
 	resStats := &ValidatorStats{}
 	if session.validatorStats == nil {
 		return resStats
 	}
+
 	session.validatorStats.mu.RLock()
 	defer session.validatorStats.mu.RUnlock()
 
 	indexes := make([]uint64, 0, len(session.validatorStats.validators))
+
 	for idx := range session.validatorStats.validators {
 		indexes = append(indexes, idx)
 	}
+
 	sort.Slice(indexes, func(i, j int) bool {
 		return indexes[i] < indexes[j]
 	})
 
 	var lastSlice *ValidatorSlice
+
 	resStats.Count = uint64(len(indexes))
 	resStats.Validators = make([]ValidatorSlice, 0, len(indexes))
+
 	for _, idx := range indexes {
 		flag := session.validatorStats.validators[idx]
 		if flag == 0 {
@@ -64,21 +69,23 @@ func (session *ProxySession) GetValidatorStats() *ValidatorStats {
 	return resStats
 }
 
-func (session *ProxySession) getOrCreateValidatorStats() *validatorStats {
+func (session *Session) getOrCreateValidatorStats() *validatorStats {
 	if session.validatorStats == nil {
 		session.validatorStats = &validatorStats{
 			validators: make(map[uint64]uint8),
 		}
 	}
+
 	return session.validatorStats
 }
 
-func (proxy *BeaconProxy) analyzePrepareBeaconProposer(session *ProxySession, body io.ReadCloser) (io.ReadCloser, error) {
+func (proxy *BeaconProxy) analyzePrepareBeaconProposer(session *Session, body io.ReadCloser) (io.ReadCloser, error) {
 	pr, pw := io.Pipe()
 	tee := io.TeeReader(body, pw)
 
 	go func() {
 		defer pw.Close()
+
 		decoder := json.NewDecoder(tee)
 
 		var registrations []struct {
@@ -96,18 +103,19 @@ func (proxy *BeaconProxy) analyzePrepareBeaconProposer(session *ProxySession, bo
 			stats.mu.Unlock()
 		}
 
-		io.Copy(io.Discard, tee)
+		io.Copy(io.Discard, tee) //nolint:errcheck // ignore error
 	}()
 
 	return pr, nil
 }
 
-func (proxy *BeaconProxy) analyzeBeaconCommitteeSubscriptions(session *ProxySession, body io.ReadCloser) (io.ReadCloser, error) {
+func (proxy *BeaconProxy) analyzeBeaconCommitteeSubscriptions(session *Session, body io.ReadCloser) (io.ReadCloser, error) {
 	pr, pw := io.Pipe()
 	tee := io.TeeReader(body, pw)
 
 	go func() {
 		defer pw.Close()
+
 		decoder := json.NewDecoder(tee)
 
 		var subscriptions []struct {
@@ -125,7 +133,7 @@ func (proxy *BeaconProxy) analyzeBeaconCommitteeSubscriptions(session *ProxySess
 			stats.mu.Unlock()
 		}
 
-		io.Copy(io.Discard, tee)
+		io.Copy(io.Discard, tee) //nolint:errcheck // ignore error
 	}()
 
 	return pr, nil

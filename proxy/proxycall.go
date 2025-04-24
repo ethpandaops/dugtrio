@@ -102,6 +102,7 @@ func (proxy *BeaconProxy) processProxyCall(w http.ResponseWriter, r *http.Reques
 	}
 
 	reqBody := r.Body
+
 	if r.Method == "POST" {
 		// analyze request body for validator stats
 		switch r.URL.EscapedPath() {
