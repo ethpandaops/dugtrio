@@ -13,25 +13,29 @@ type CachedBlock struct {
 	headerMutex sync.Mutex
 	header      *phase0.SignedBeaconBlockHeader
 	seenMutex   sync.RWMutex
-	seenMap     map[uint16]*PoolClient
+	seenMap     map[uint16]*Client
 }
 
-func (block *CachedBlock) GetSeenBy() []*PoolClient {
+func (block *CachedBlock) GetSeenBy() []*Client {
 	block.seenMutex.RLock()
 	defer block.seenMutex.RUnlock()
-	clients := []*PoolClient{}
+
+	clients := []*Client{}
 	for _, client := range block.seenMap {
 		clients = append(clients, client)
 	}
+
 	sort.Slice(clients, func(a, b int) bool {
 		return clients[a].clientIdx < clients[b].clientIdx
 	})
+
 	return clients
 }
 
-func (block *CachedBlock) SetSeenBy(client *PoolClient) {
+func (block *CachedBlock) SetSeenBy(client *Client) {
 	block.seenMutex.Lock()
 	defer block.seenMutex.Unlock()
+
 	block.seenMap[client.clientIdx] = client
 }
 
@@ -43,6 +47,7 @@ func (block *CachedBlock) GetParentRoot() *phase0.Root {
 	if block.header == nil {
 		return nil
 	}
+
 	return &block.header.Message.ParentRoot
 }
 
@@ -57,6 +62,7 @@ func (block *CachedBlock) EnsureHeader(loadHeader func() (*phase0.SignedBeaconBl
 
 	block.headerMutex.Lock()
 	defer block.headerMutex.Unlock()
+
 	if block.header != nil {
 		return nil
 	}
@@ -65,6 +71,8 @@ func (block *CachedBlock) EnsureHeader(loadHeader func() (*phase0.SignedBeaconBl
 	if err != nil {
 		return err
 	}
+
 	block.header = header
+
 	return nil
 }

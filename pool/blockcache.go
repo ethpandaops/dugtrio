@@ -17,7 +17,7 @@ import (
 )
 
 type BlockCache struct {
-	followDistance uint64
+	followDistance uint32
 	specMutex      sync.RWMutex
 	specs          *types.ChainConfig
 	finalizedMutex sync.RWMutex
@@ -29,16 +29,19 @@ type BlockCache struct {
 	maxSlotIdx     int64
 }
 
-func NewBlockCache(followDistance uint64) (*BlockCache, error) {
+func NewBlockCache(followDistance uint32) (*BlockCache, error) {
 	if followDistance == 0 {
 		return nil, fmt.Errorf("cannot initialize block cache without follow distance")
 	}
+
 	cache := BlockCache{
 		followDistance: followDistance,
 		slotMap:        make(map[phase0.Slot][]*CachedBlock),
 		rootMap:        make(map[phase0.Root]*CachedBlock),
 	}
+
 	go cache.runCacheCleanup()
+
 	return &cache, nil
 }
 
@@ -47,6 +50,7 @@ func (cache *BlockCache) SetClientSpecs(specValues map[string]interface{}) error
 	defer cache.specMutex.Unlock()
 
 	specs := types.ChainConfig{}
+
 	err := smapping.FillStructByTags(&specs, specValues, "yaml")
 	if err != nil {
 		return err
@@ -58,6 +62,7 @@ func (cache *BlockCache) SetClientSpecs(specValues map[string]interface{}) error
 			return fmt.Errorf("spec mismatch: %v", strings.Join(mismatches, ", "))
 		}
 	}
+
 	cache.specs = &specs
 
 	return nil
@@ -66,6 +71,7 @@ func (cache *BlockCache) SetClientSpecs(specValues map[string]interface{}) error
 func (cache *BlockCache) GetSpecs() *types.ChainConfig {
 	cache.specMutex.RLock()
 	defer cache.specMutex.RUnlock()
+
 	return cache.specs
 }
 
@@ -89,32 +95,40 @@ func (cache *BlockCache) GetFinalizedCheckpoint() (phase0.Epoch, phase0.Root) {
 func (cache *BlockCache) AddBlock(root phase0.Root, slot phase0.Slot) (*CachedBlock, bool) {
 	cache.cacheMutex.Lock()
 	defer cache.cacheMutex.Unlock()
+
 	if cache.rootMap[root] != nil {
 		return cache.rootMap[root], false
 	}
-	if int64(slot) < cache.maxSlotIdx-int64(cache.followDistance) {
+
+	cutOffSlot := cache.maxSlotIdx - int64(cache.followDistance)
+	if cutOffSlot > 0 && slot < phase0.Slot(cutOffSlot) {
 		return nil, false
 	}
+
 	cacheBlock := &CachedBlock{
 		Root:    root,
 		Slot:    slot,
-		seenMap: make(map[uint16]*PoolClient),
+		seenMap: make(map[uint16]*Client),
 	}
+
 	cache.rootMap[root] = cacheBlock
 	if cache.slotMap[slot] == nil {
 		cache.slotMap[slot] = []*CachedBlock{cacheBlock}
 	} else {
 		cache.slotMap[slot] = append(cache.slotMap[slot], cacheBlock)
 	}
-	if int64(slot) > cache.maxSlotIdx {
-		cache.maxSlotIdx = int64(slot)
+
+	if cache.maxSlotIdx < 0 || slot > phase0.Slot(cache.maxSlotIdx) {
+		cache.maxSlotIdx = int64(slot) //nolint:gosec // no overflow possible
 	}
+
 	return cacheBlock, true
 }
 
 func (cache *BlockCache) GetCachedBlockByRoot(root phase0.Root) *CachedBlock {
 	cache.cacheMutex.RLock()
 	defer cache.cacheMutex.RUnlock()
+
 	return cache.rootMap[root]
 }
 
@@ -124,9 +138,11 @@ func (cache *BlockCache) GetCachedBlocks() []*CachedBlock {
 
 	blocks := []*CachedBlock{}
 	slots := []phase0.Slot{}
+
 	for slot := range cache.slotMap {
 		slots = append(slots, slot)
 	}
+
 	sort.Slice(slots, func(a, b int) bool {
 		return slots[a] > slots[b]
 	})
@@ -134,11 +150,12 @@ func (cache *BlockCache) GetCachedBlocks() []*CachedBlock {
 	for _, slot := range slots {
 		blocks = append(blocks, cache.slotMap[slot]...)
 	}
+
 	return blocks
 }
 
 func (cache *BlockCache) runCacheCleanup() {
-	defer utils.HandleSubroutinePanic("pool.blockcache.cleanup")
+	defer utils.HandleSubroutinePanic("BlockCache.runCacheCleanup", cache.runCacheCleanup)
 
 	for {
 		time.Sleep(30 * time.Second)
@@ -158,6 +175,7 @@ func (cache *BlockCache) cleanupCache() error {
 	if minSlot <= 0 {
 		return nil
 	}
+
 	for slot, blocks := range cache.slotMap {
 		if slot >= phase0.Slot(minSlot) {
 			continue
@@ -166,40 +184,49 @@ func (cache *BlockCache) cleanupCache() error {
 		for _, block := range blocks {
 			delete(cache.rootMap, block.Root)
 		}
+
 		delete(cache.slotMap, slot)
 	}
+
 	return nil
 }
 
-func (cache *BlockCache) IsCanonicalBlock(blockRoot phase0.Root, headRoot phase0.Root) bool {
+func (cache *BlockCache) IsCanonicalBlock(blockRoot, headRoot phase0.Root) bool {
 	res, _ := cache.GetBlockDistance(blockRoot, headRoot)
 	return res
 }
 
-func (cache *BlockCache) GetBlockDistance(blockRoot phase0.Root, headRoot phase0.Root) (bool, uint64) {
+func (cache *BlockCache) GetBlockDistance(blockRoot, headRoot phase0.Root) (isParent bool, distance uint64) {
 	if bytes.Equal(headRoot[:], blockRoot[:]) {
 		return true, 0
 	}
+
 	block := cache.GetCachedBlockByRoot(blockRoot)
 	if block == nil {
 		return false, 0
 	}
+
 	blockSlot := block.Slot
 	headBlock := cache.GetCachedBlockByRoot(headRoot)
-	var distance uint64 = 0
+	cdistance := uint64(0)
+
 	for headBlock != nil {
 		if headBlock.Slot < blockSlot {
 			return false, 0
 		}
+
 		parentRoot := headBlock.GetParentRoot()
 		if parentRoot == nil {
 			return false, 0
 		}
-		distance++
+
+		cdistance++
 		if bytes.Equal(parentRoot[:], blockRoot[:]) {
-			return true, distance
+			return true, cdistance
 		}
+
 		headBlock = cache.GetCachedBlockByRoot(*parentRoot)
 	}
+
 	return false, 0
 }

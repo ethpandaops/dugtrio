@@ -21,13 +21,15 @@ type LogWriter struct {
 func InitLogger(config *types.LoggingConfig) *LogWriter {
 	logrus.SetOutput(io.Discard) // Send all logs to nowhere by default
 	logrus.SetLevel(logrus.TraceLevel)
-	logWriter := &LogWriter{}
 
+	logWriter := &LogWriter{}
 	outputLevel := getLogLevels(logrus.InfoLevel)
+
 	if config.OutputLevel != "" {
 		levelParts := strings.Split(config.OutputLevel, "|")
 		if len(levelParts) > 1 {
 			outputLevel = []logrus.Level{}
+
 			for _, level := range levelParts {
 				logLevel := parseLogLevel(level)
 				if logLevel != 9999 {
@@ -43,13 +45,16 @@ func InitLogger(config *types.LoggingConfig) *LogWriter {
 			}
 		}
 	}
+
 	if len(outputLevel) > 0 {
 		var writer io.Writer
+
 		if config.OutputStderr {
 			writer = os.Stderr
 		} else {
 			writer = os.Stdout
 		}
+
 		logrus.AddHook(&LogWriterHook{
 			Writer:    writer,
 			LogLevels: outputLevel,
@@ -58,10 +63,12 @@ func InitLogger(config *types.LoggingConfig) *LogWriter {
 
 	if config.FilePath != "" {
 		fileLevel := getLogLevels(logrus.InfoLevel)
+
 		if config.FileLevel != "" {
 			levelParts := strings.Split(config.FileLevel, "|")
 			if len(levelParts) > 1 {
 				fileLevel = []logrus.Level{}
+
 				for _, level := range levelParts {
 					logLevel := parseLogLevel(level)
 					if logLevel != 9999 {
@@ -79,11 +86,13 @@ func InitLogger(config *types.LoggingConfig) *LogWriter {
 		}
 
 		logrus.Printf("logging to file: %v (%v)\n", config.FilePath, fileLevel)
-		f, err := os.OpenFile(config.FilePath, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644)
+
+		f, err := os.OpenFile(config.FilePath, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0o644)
 		if err != nil {
 			fmt.Println("Failed to create logfile" + config.FilePath)
 			panic(err)
 		}
+
 		logWriter.logFile = f
 		logrus.AddHook(&LogWriterHook{ // Send info and debug logs to stdout
 			Writer:    f,
@@ -102,7 +111,8 @@ func (logWriter *LogWriter) Dispose() {
 }
 
 func getLogLevels(level logrus.Level) []logrus.Level {
-	if level == logrus.TraceLevel {
+	switch level {
+	case logrus.TraceLevel:
 		return []logrus.Level{
 			logrus.PanicLevel,
 			logrus.FatalLevel,
@@ -112,7 +122,7 @@ func getLogLevels(level logrus.Level) []logrus.Level {
 			logrus.DebugLevel,
 			logrus.TraceLevel,
 		}
-	} else if level == logrus.DebugLevel {
+	case logrus.DebugLevel:
 		return []logrus.Level{
 			logrus.PanicLevel,
 			logrus.FatalLevel,
@@ -121,7 +131,7 @@ func getLogLevels(level logrus.Level) []logrus.Level {
 			logrus.InfoLevel,
 			logrus.DebugLevel,
 		}
-	} else if level == logrus.InfoLevel {
+	case logrus.InfoLevel:
 		return []logrus.Level{
 			logrus.PanicLevel,
 			logrus.FatalLevel,
@@ -129,31 +139,31 @@ func getLogLevels(level logrus.Level) []logrus.Level {
 			logrus.WarnLevel,
 			logrus.InfoLevel,
 		}
-	} else if level == logrus.WarnLevel {
+	case logrus.WarnLevel:
 		return []logrus.Level{
 			logrus.PanicLevel,
 			logrus.FatalLevel,
 			logrus.ErrorLevel,
 			logrus.WarnLevel,
 		}
-	} else if level == logrus.ErrorLevel {
+	case logrus.ErrorLevel:
 		return []logrus.Level{
 			logrus.PanicLevel,
 			logrus.FatalLevel,
 			logrus.ErrorLevel,
 		}
-	} else if level == logrus.FatalLevel {
+	case logrus.FatalLevel:
 		return []logrus.Level{
 			logrus.PanicLevel,
 			logrus.FatalLevel,
 		}
-	} else if level == logrus.PanicLevel {
+	case logrus.PanicLevel:
 		return []logrus.Level{
 			logrus.PanicLevel,
 		}
-	} else {
-		return []logrus.Level{}
 	}
+
+	return []logrus.Level{}
 }
 
 func parseLogLevel(level string) logrus.Level {
@@ -175,6 +185,7 @@ func parseLogLevel(level string) logrus.Level {
 	case "none":
 		return 9999
 	}
+
 	return 0
 }
 
@@ -191,7 +202,9 @@ func (hook *LogWriterHook) Fire(entry *logrus.Entry) error {
 	if err != nil {
 		return err
 	}
+
 	_, err = hook.Writer.Write([]byte(line))
+
 	return err
 }
 
@@ -226,8 +239,10 @@ func logErrorInfo(err error, callerSkip int, additionalInfos ...map[string]inter
 	}
 
 	errColl := []string{}
+
 	for {
 		errColl = append(errColl, fmt.Sprint(err))
+
 		nextErr := errors.Unwrap(err)
 		if nextErr != nil {
 			err = nextErr
@@ -240,6 +255,7 @@ func logErrorInfo(err error, callerSkip int, additionalInfos ...map[string]inter
 	for idx := 0; idx < (len(errColl) - 1); idx++ {
 		errInfoText := fmt.Sprintf("%serrInfo_%v%s", errMarkSign, idx, errMarkSign)
 		nextErrInfoText := fmt.Sprintf("%serrInfo_%v%s", errMarkSign, idx+1, errMarkSign)
+
 		if idx == (len(errColl) - 2) {
 			nextErrInfoText = fmt.Sprintf("%serror%s", errMarkSign, errMarkSign)
 		}
@@ -267,13 +283,15 @@ func logErrorInfo(err error, callerSkip int, additionalInfos ...map[string]inter
 	return logFields
 }
 
-func GetRedactedUrl(requrl string) string {
-	urlData, _ := url.Parse(requrl)
+func GetRedactedURL(requrl string) string {
 	var logurl string
+
+	urlData, _ := url.Parse(requrl)
 	if urlData != nil {
 		logurl = urlData.Redacted()
 	} else {
 		logurl = requrl
 	}
+
 	return logurl
 }

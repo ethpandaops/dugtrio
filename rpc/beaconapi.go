@@ -2,11 +2,11 @@ package rpc
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
 	eth2client "github.com/attestantio/go-eth2-client"
+	"github.com/attestantio/go-eth2-client/api"
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/http"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -29,13 +29,12 @@ type BeaconClient struct {
 func NewBeaconClient(endpointCfg *types.EndpointConfig) (*BeaconClient, error) {
 	client := &BeaconClient{
 		name:     endpointCfg.Name,
-		endpoint: endpointCfg.Url,
+		endpoint: endpointCfg.URL,
 		headers:  endpointCfg.Headers,
 	}
+
 	return client, nil
 }
-
-var errNotFound = errors.New("not found 404")
 
 func (bc *BeaconClient) Initialize(ctx context.Context) error {
 	if bc.clientSvc != nil {
@@ -46,12 +45,10 @@ func (bc *BeaconClient) Initialize(ctx context.Context) error {
 		http.WithAddress(bc.endpoint),
 		http.WithTimeout(10 * time.Minute),
 		http.WithLogLevel(zerolog.Disabled),
-		// TODO (when upstream PR is merged)
-		//http.WithConnectionCheck(false),
 	}
 
 	// set extra endpoint headers
-	if bc.headers != nil && len(bc.headers) > 0 {
+	if len(bc.headers) > 0 {
 		cliParams = append(cliParams, http.WithExtraHeaders(bc.headers))
 	}
 
@@ -61,21 +58,29 @@ func (bc *BeaconClient) Initialize(ctx context.Context) error {
 	}
 
 	bc.clientSvc = clientSvc
+
 	return nil
 }
 
 func (bc *BeaconClient) GetGenesis() (*v1.Genesis, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
 	provider, isProvider := bc.clientSvc.(eth2client.GenesisProvider)
 	if !isProvider {
 		return nil, fmt.Errorf("get genesis not supported")
 	}
-	result, err := provider.Genesis(ctx)
+
+	result, err := provider.Genesis(ctx, &api.GenesisOpts{
+		Common: api.CommonOpts{
+			Timeout: 0,
+		},
+	})
 	if err != nil {
 		return nil, err
 	}
-	return result, nil
+
+	return result.Data, nil
 }
 
 func (bc *BeaconClient) GetNodeSyncing(ctx context.Context) (*v1.SyncState, error) {
@@ -83,17 +88,17 @@ func (bc *BeaconClient) GetNodeSyncing(ctx context.Context) (*v1.SyncState, erro
 	if !isProvider {
 		return nil, fmt.Errorf("get node syncing not supported")
 	}
-	result, err := provider.NodeSyncing(ctx)
+
+	result, err := provider.NodeSyncing(ctx, &api.NodeSyncingOpts{
+		Common: api.CommonOpts{
+			Timeout: 0,
+		},
+	})
 	if err != nil {
 		return nil, err
 	}
-	return result, nil
-}
 
-type apiNodeVersion struct {
-	Data struct {
-		Version string `json:"version"`
-	} `json:"data"`
+	return result.Data, nil
 }
 
 func (bc *BeaconClient) GetNodeVersion(ctx context.Context) (string, error) {
@@ -101,11 +106,17 @@ func (bc *BeaconClient) GetNodeVersion(ctx context.Context) (string, error) {
 	if !isProvider {
 		return "", fmt.Errorf("get node version not supported")
 	}
-	result, err := provider.NodeVersion(ctx)
+
+	result, err := provider.NodeVersion(ctx, &api.NodeVersionOpts{
+		Common: api.CommonOpts{
+			Timeout: 0,
+		},
+	})
 	if err != nil {
 		return "", err
 	}
-	return result, nil
+
+	return result.Data, nil
 }
 
 func (bc *BeaconClient) GetConfigSpecs(ctx context.Context) (map[string]interface{}, error) {
@@ -113,11 +124,17 @@ func (bc *BeaconClient) GetConfigSpecs(ctx context.Context) (map[string]interfac
 	if !isProvider {
 		return nil, fmt.Errorf("get specs not supported")
 	}
-	result, err := provider.Spec(ctx)
+
+	result, err := provider.Spec(ctx, &api.SpecOpts{
+		Common: api.CommonOpts{
+			Timeout: 0,
+		},
+	})
 	if err != nil {
 		return nil, err
 	}
-	return result, nil
+
+	return result.Data, nil
 }
 
 func (bc *BeaconClient) GetLatestBlockHead(ctx context.Context) (*v1.BeaconBlockHeader, error) {
@@ -125,11 +142,18 @@ func (bc *BeaconClient) GetLatestBlockHead(ctx context.Context) (*v1.BeaconBlock
 	if !isProvider {
 		return nil, fmt.Errorf("get beacon block headers not supported")
 	}
-	result, err := provider.BeaconBlockHeader(ctx, "head")
+
+	result, err := provider.BeaconBlockHeader(ctx, &api.BeaconBlockHeaderOpts{
+		Block: "head",
+		Common: api.CommonOpts{
+			Timeout: 0,
+		},
+	})
 	if err != nil {
 		return nil, err
 	}
-	return result, nil
+
+	return result.Data, nil
 }
 
 func (bc *BeaconClient) GetFinalityCheckpoints(ctx context.Context) (*v1.Finality, error) {
@@ -137,11 +161,18 @@ func (bc *BeaconClient) GetFinalityCheckpoints(ctx context.Context) (*v1.Finalit
 	if !isProvider {
 		return nil, fmt.Errorf("get finality not supported")
 	}
-	result, err := provider.Finality(ctx, "head")
+
+	result, err := provider.Finality(ctx, &api.FinalityOpts{
+		State: "head",
+		Common: api.CommonOpts{
+			Timeout: 0,
+		},
+	})
 	if err != nil {
 		return nil, err
 	}
-	return result, nil
+
+	return result.Data, nil
 }
 
 func (bc *BeaconClient) GetBlockHeaderByBlockroot(ctx context.Context, blockroot phase0.Root) (*v1.BeaconBlockHeader, error) {
@@ -149,11 +180,18 @@ func (bc *BeaconClient) GetBlockHeaderByBlockroot(ctx context.Context, blockroot
 	if !isProvider {
 		return nil, fmt.Errorf("get beacon block headers not supported")
 	}
-	result, err := provider.BeaconBlockHeader(ctx, fmt.Sprintf("0x%x", blockroot))
+
+	result, err := provider.BeaconBlockHeader(ctx, &api.BeaconBlockHeaderOpts{
+		Block: fmt.Sprintf("0x%x", blockroot),
+		Common: api.CommonOpts{
+			Timeout: 0,
+		},
+	})
 	if err != nil {
 		return nil, err
 	}
-	return result, nil
+
+	return result.Data, nil
 }
 
 func (bc *BeaconClient) GetBlockHeaderBySlot(ctx context.Context, slot phase0.Slot) (*v1.BeaconBlockHeader, error) {
@@ -161,9 +199,16 @@ func (bc *BeaconClient) GetBlockHeaderBySlot(ctx context.Context, slot phase0.Sl
 	if !isProvider {
 		return nil, fmt.Errorf("get beacon block headers not supported")
 	}
-	result, err := provider.BeaconBlockHeader(ctx, fmt.Sprintf("%d", slot))
+
+	result, err := provider.BeaconBlockHeader(ctx, &api.BeaconBlockHeaderOpts{
+		Block: fmt.Sprintf("%d", slot),
+		Common: api.CommonOpts{
+			Timeout: 0,
+		},
+	})
 	if err != nil {
 		return nil, err
 	}
-	return result, nil
+
+	return result.Data, nil
 }
