@@ -57,10 +57,10 @@ type BeaconProxy struct {
 	pool         *pool.BeaconPool
 	proxyMetrics *metrics.ProxyMetrics
 	logger       *logrus.Entry
-	blockedPaths []regexp.Regexp
+	blockedPaths []*regexp.Regexp
 
 	sessionMutex sync.Mutex
-	sessions     map[string]*ProxySession
+	sessions     map[string]*Session
 }
 
 func NewBeaconProxy(config *types.ProxyConfig, pool *pool.BeaconPool, proxyMetrics *metrics.ProxyMetrics) (*BeaconProxy, error) {
@@ -69,31 +69,36 @@ func NewBeaconProxy(config *types.ProxyConfig, pool *pool.BeaconPool, proxyMetri
 		pool:         pool,
 		proxyMetrics: proxyMetrics,
 		logger:       logrus.WithField("module", "proxy"),
-		blockedPaths: []regexp.Regexp{},
-		sessions:     map[string]*ProxySession{},
+		blockedPaths: []*regexp.Regexp{},
+		sessions:     map[string]*Session{},
 	}
 
 	blockedPaths := []string{}
 	blockedPaths = append(blockedPaths, config.BlockedPaths...)
+
 	for _, blockedPath := range strings.Split(config.BlockedPathsStr, ",") {
 		blockedPath = strings.Trim(blockedPath, " ")
 		if blockedPath == "" {
 			continue
 		}
+
 		blockedPaths = append(blockedPaths, blockedPath)
 	}
+
 	for _, blockedPath := range blockedPaths {
 		blockedPathPattern, err := regexp.Compile(blockedPath)
 		if err != nil {
 			proxy.logger.Errorf("error parsing blocked path pattern '%v': %v", blockedPath, err)
 			continue
 		}
-		proxy.blockedPaths = append(proxy.blockedPaths, *blockedPathPattern)
+
+		proxy.blockedPaths = append(proxy.blockedPaths, blockedPathPattern)
 	}
 
 	if config.CallTimeout == 0 {
 		config.CallTimeout = 60 * time.Second
 	}
+
 	if config.SessionTimeout == 0 {
 		config.SessionTimeout = 10 * time.Minute
 	}
@@ -103,6 +108,7 @@ func NewBeaconProxy(config *types.ProxyConfig, pool *pool.BeaconPool, proxyMetri
 	}
 
 	go proxy.cleanupSessions()
+
 	return &proxy, nil
 }
 
@@ -110,24 +116,37 @@ func (proxy *BeaconProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	proxy.processCall(w, r, pool.UnspecifiedClient)
 }
 
-func (proxy *BeaconProxy) ServeHealthCheckHTTP(w http.ResponseWriter, r *http.Request) {
+func (proxy *BeaconProxy) ServeHealthCheckHTTP(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "text/html")
 
 	canonicalFork := proxy.pool.GetCanonicalFork()
 	if canonicalFork == nil || len(canonicalFork.ReadyClients) == 0 {
 		w.WriteHeader(http.StatusServiceUnavailable)
-		w.Write([]byte("no_useable_endpoint"))
+
+		_, err := w.Write([]byte("no_useable_endpoint"))
+		if err != nil {
+			proxy.logger.Warnf("error writing no useable endpoint response: %v", err)
+		}
+
 		return
 	}
 
-	w.Write([]byte("ready"))
+	_, err := w.Write([]byte("ready"))
+	if err != nil {
+		proxy.logger.Warnf("error writing ready response: %v", err)
+	}
 }
 
 func (proxy *BeaconProxy) processCall(w http.ResponseWriter, r *http.Request, clientType pool.ClientType) {
 	if proxy.checkBlockedPaths(r.URL) {
 		w.Header().Set("Content-Type", "text/html")
 		w.WriteHeader(http.StatusForbidden)
-		w.Write([]byte("Path Blocked"))
+
+		_, err := w.Write([]byte("Path Blocked"))
+		if err != nil {
+			proxy.logger.Warnf("error writing path blocked response: %v", err)
+		}
+
 		return
 	}
 
@@ -135,7 +154,12 @@ func (proxy *BeaconProxy) processCall(w http.ResponseWriter, r *http.Request, cl
 	if !validAuth {
 		w.Header().Set("Content-Type", "text/html")
 		w.WriteHeader(http.StatusUnauthorized)
-		w.Write([]byte("Unauthorized"))
+
+		_, err := w.Write([]byte("Unauthorized"))
+		if err != nil {
+			proxy.logger.Warnf("error writing unauthorized response: %v", err)
+		}
+
 		return
 	}
 
@@ -143,11 +167,16 @@ func (proxy *BeaconProxy) processCall(w http.ResponseWriter, r *http.Request, cl
 	if session.checkCallLimit(1) != nil {
 		w.Header().Set("Content-Type", "text/html")
 		w.WriteHeader(http.StatusTooManyRequests)
-		w.Write([]byte("Call Limit exceeded"))
+
+		_, err := w.Write([]byte("Call Limit exceeded"))
+		if err != nil {
+			proxy.logger.Warnf("error writing call limit exceeded response: %v", err)
+		}
+
 		return
 	}
 
-	var endpoint *pool.PoolClient
+	var endpoint *pool.Client
 	if proxy.config.StickyEndpoint && proxy.pool.IsClientReady(session.lastPoolClient) {
 		endpoint = session.lastPoolClient
 	}
@@ -156,21 +185,30 @@ func (proxy *BeaconProxy) processCall(w http.ResponseWriter, r *http.Request, cl
 	if nextEndpoint == "" {
 		nextEndpoint = r.URL.Query().Get("dugtrio-next-endpoint")
 	}
+
 	if nextEndpoint != "" {
 		nextEndpointType := pool.ParseClientType(nextEndpoint)
 		if nextEndpointType != pool.UnknownClient {
 			clientType = nextEndpointType
 		}
+
 		endpoint = nil
 	}
+
 	if endpoint == nil || (clientType != pool.UnspecifiedClient && endpoint.GetClientType() != clientType) {
 		endpoint = proxy.pool.GetReadyEndpoint(clientType)
 		session.setLastPoolClient(endpoint)
 	}
+
 	if endpoint == nil {
 		w.Header().Set("Content-Type", "text/html")
 		w.WriteHeader(http.StatusServiceUnavailable)
-		w.Write([]byte("No Endpoint available"))
+
+		_, err := w.Write([]byte("No Endpoint available"))
+		if err != nil {
+			proxy.logger.Warnf("error writing no endpoint available response: %v", err)
+		}
+
 		return
 	}
 
@@ -184,9 +222,13 @@ func (proxy *BeaconProxy) processCall(w http.ResponseWriter, r *http.Request, cl
 		proxy.logger.WithFields(logrus.Fields{
 			"endpoint": endpoint.GetName(),
 			"method":   r.Method,
-			"url":      utils.GetRedactedUrl(r.URL.String()),
+			"url":      utils.GetRedactedURL(r.URL.String()),
 		}).Warnf("proxy error %v", err)
-		w.Write([]byte("Internal Server Error"))
+
+		_, err = w.Write([]byte("Internal Server Error"))
+		if err != nil {
+			proxy.logger.Warnf("error writing internal server error response: %v", err)
+		}
 	}
 }
 
@@ -197,11 +239,12 @@ func (proxy *BeaconProxy) checkBlockedPaths(url *url.URL) bool {
 			return true
 		}
 	}
+
 	return false
 }
 
 func (proxy *BeaconProxy) rebalanceSessionsLoop() {
-	defer utils.HandleSubroutinePanic("proxy.session.rebalance")
+	defer utils.HandleSubroutinePanic("proxy.session.rebalance", proxy.rebalanceSessionsLoop)
 
 	for {
 		time.Sleep(proxy.config.RebalanceInterval)
@@ -218,7 +261,7 @@ func (proxy *BeaconProxy) rebalanceSessions() {
 	readyClients := canonicalFork.ReadyClients
 
 	// Count sessions per endpoint
-	endpointCounts := make(map[*pool.PoolClient]int)
+	endpointCounts := make(map[*pool.Client]int)
 	for _, client := range readyClients {
 		endpointCounts[client] = 0
 	}
@@ -227,6 +270,7 @@ func (proxy *BeaconProxy) rebalanceSessions() {
 	defer proxy.sessionMutex.Unlock()
 
 	totalSessions := 0
+
 	for _, session := range proxy.sessions {
 		if session.lastPoolClient != nil && slices.Contains(readyClients, session.lastPoolClient) {
 			endpointCounts[session.lastPoolClient]++
@@ -238,8 +282,9 @@ func (proxy *BeaconProxy) rebalanceSessions() {
 	idealCount := float64(totalSessions) / float64(len(readyClients))
 
 	// Check if any endpoint exceeds threshold
-	var diff float64
-	var absDiff int
+	diff := 0.0
+	absDiff := 0
+
 	needsRebalance := func() bool {
 		for _, count := range endpointCounts {
 			diff = math.Abs(float64(count)-idealCount) / idealCount
@@ -250,6 +295,7 @@ func (proxy *BeaconProxy) rebalanceSessions() {
 				return true
 			}
 		}
+
 		return false
 	}
 
@@ -261,10 +307,12 @@ func (proxy *BeaconProxy) rebalanceSessions() {
 		rebalanceOne := func() bool {
 			// Sort endpoints by session count
 			type endpointCount struct {
-				client *pool.PoolClient
+				client *pool.Client
 				count  int
 			}
+
 			counts := make([]endpointCount, 0, len(endpointCounts))
+
 			for client, count := range endpointCounts {
 				counts = append(counts, endpointCount{client, count})
 			}
@@ -277,12 +325,15 @@ func (proxy *BeaconProxy) rebalanceSessions() {
 				return counts[i].count > counts[j].count
 			})
 
-			var targetClient *pool.PoolClient
+			var targetClient *pool.Client
+
 			var targetCountsIndex int
+
 			for i := len(counts) - 1; i > 0; i-- {
 				if slices.Contains(readyClients, counts[i].client) {
 					targetClient = counts[i].client
 					targetCountsIndex = i
+
 					break
 				}
 			}
@@ -291,7 +342,7 @@ func (proxy *BeaconProxy) rebalanceSessions() {
 				return false
 			}
 
-			sessions := make([]*ProxySession, 0, counts[0].count)
+			sessions := make([]*Session, 0, counts[0].count)
 			for _, session := range proxy.sessions {
 				if session.lastPoolClient == counts[0].client {
 					sessions = append(sessions, session)
@@ -307,23 +358,21 @@ func (proxy *BeaconProxy) rebalanceSessions() {
 			}
 
 			session := sessions[0]
+
 			session.setLastPoolClient(targetClient)
+
 			endpointCounts[counts[0].client]--
 			counts[0].count--
-
 			endpointCounts[targetClient]++
 			counts[targetCountsIndex].count++
-
-			proxy.logger.Infof("Rebalanced session %v: %v -> %v", session.GetIpAddr(), counts[0].client.GetName(), targetClient.GetName())
 			rebalancedCount++
+
+			proxy.logger.Infof("Rebalanced session %v: %v -> %v", session.GetIPAddr(), counts[0].client.GetName(), targetClient.GetName())
+
 			return true
 		}
 
-		for {
-			if !rebalanceOne() {
-				break
-			}
-
+		for rebalanceOne() {
 			if !needsRebalance() {
 				break
 			}

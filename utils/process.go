@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/signal"
 	"runtime/debug"
+	"time"
 
 	"github.com/sirupsen/logrus"
 )
@@ -15,8 +16,15 @@ func WaitForCtrlC() {
 	<-c
 }
 
-func HandleSubroutinePanic(identifier string) {
+func HandleSubroutinePanic(identifier string, restartFn func()) {
 	if err := recover(); err != nil {
-		logrus.WithError(err.(error)).Errorf("uncaught panic in %v subroutine: %v, stack: %v", identifier, err, string(debug.Stack()))
+		err2, _ := err.(error)
+		logrus.WithError(err2).Errorf("uncaught panic in %v subroutine: %v, stack: %v", identifier, err, string(debug.Stack()))
+
+		if restartFn != nil {
+			time.Sleep(5 * time.Second)
+			logrus.Infof("restarting %v subroutine", identifier)
+			restartFn()
+		}
 	}
 }

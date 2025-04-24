@@ -16,7 +16,7 @@ import (
 func GetTemplateFuncs() template.FuncMap {
 	return template.FuncMap{
 		"includeHTML": IncludeHTML,
-		"html":        func(x string) template.HTML { return template.HTML(x) },
+		"html":        func(x string) template.HTML { return template.HTML(x) }, //nolint:gosec // no XSS here
 		"bigIntCmp":   func(i *big.Int, j int) int { return i.Cmp(big.NewInt(int64(j))) },
 		"mod":         func(i, j int) bool { return i%j == 0 },
 		"sub":         func(i, j int) int { return i - j },
@@ -48,6 +48,7 @@ func checkInList(item, list string) bool {
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -57,27 +58,32 @@ func IncludeHTML(path string) template.HTML {
 		logger.Printf("includeHTML - error reading file: %v", err)
 		return ""
 	}
-	return template.HTML(string(b))
+
+	return template.HTML(string(b)) //nolint:gosec // no XSS here
 }
 
 func FormatTimeDiff(ts time.Time) template.HTML {
-	duration := time.Until(ts)
 	var timeStr string
+
+	duration := time.Until(ts)
 	absDuraction := duration.Abs()
-	if absDuraction < 1*time.Second {
-		return template.HTML("now")
-	} else if absDuraction < 60*time.Second {
+
+	switch {
+	case absDuraction < 1*time.Second:
+		timeStr = "now"
+	case absDuraction < 60*time.Second:
 		timeStr = fmt.Sprintf("%v sec.", uint(absDuraction.Seconds()))
-	} else if absDuraction < 60*time.Minute {
+	case absDuraction < 60*time.Minute:
 		timeStr = fmt.Sprintf("%v min.", uint(absDuraction.Minutes()))
-	} else if absDuraction < 24*time.Hour {
+	case absDuraction < 24*time.Hour:
 		timeStr = fmt.Sprintf("%v hr.", uint(absDuraction.Hours()))
-	} else {
+	default:
 		timeStr = fmt.Sprintf("%v day.", uint(absDuraction.Hours()/24))
 	}
+
 	if duration < 0 {
-		return template.HTML(fmt.Sprintf("%v ago", timeStr))
-	} else {
-		return template.HTML(fmt.Sprintf("in %v", timeStr))
+		return template.HTML(fmt.Sprintf("%v ago", timeStr)) //nolint:gosec // no XSS here
 	}
+
+	return template.HTML(fmt.Sprintf("in %v", timeStr)) //nolint:gosec // no XSS here
 }

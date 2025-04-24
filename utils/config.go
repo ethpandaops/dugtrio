@@ -17,9 +17,12 @@ func ReadConfig(cfg *types.Config, path string) error {
 		return err
 	}
 
-	readConfigEnv(cfg)
+	err = readConfigEnv(cfg)
+	if err != nil {
+		return err
+	}
 
-	if cfg.Endpoints == nil || len(cfg.Endpoints) == 0 {
+	if len(cfg.Endpoints) == 0 {
 		return fmt.Errorf("missing beacon node endpoints (need at least 1 endpoint)")
 	}
 
@@ -34,10 +37,12 @@ func readConfigFile(cfg *types.Config, path string) error {
 	defer f.Close()
 
 	decoder := yaml.NewDecoder(f)
+
 	err = decoder.Decode(cfg)
 	if err != nil {
 		return fmt.Errorf("error decoding explorer config: %v", err)
 	}
+
 	return nil
 }
 

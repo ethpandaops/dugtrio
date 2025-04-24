@@ -24,7 +24,7 @@ type HealthPageClient struct {
 	Index       int       `json:"index"`
 	Name        string    `json:"name"`
 	Version     string    `json:"version"`
-	Type        uint64    `json:"type"`
+	Type        int8      `json:"type"`
 	HeadSlot    uint64    `json:"head_slot"`
 	HeadRoot    []byte    `json:"head_root"`
 	Status      string    `json:"status"`
@@ -53,20 +53,21 @@ type HealthPageForkClient struct {
 
 // Health will return the "health" page using a go template
 func (fh *FrontendHandler) Health(w http.ResponseWriter, r *http.Request) {
-	var templateFiles = append(frontend.LayoutTemplateFiles,
-		"health/health.html",
-	)
-
-	var pageTemplate = frontend.GetTemplate(templateFiles...)
+	templateFiles := frontend.LayoutTemplateFiles
+	templateFiles = append(templateFiles, "health/health.html")
+	pageTemplate := frontend.GetTemplate(templateFiles...)
 	data := frontend.InitPageData(w, r, "health", "/health", "Health", templateFiles)
 
 	var pageError error
+
 	data.Data, pageError = fh.getHealthPageData()
 	if pageError != nil {
 		frontend.HandlePageError(w, r, pageError)
 		return
 	}
+
 	w.Header().Set("Content-Type", "text/html")
+
 	if frontend.HandleTemplateError(w, r, "health.go", "Health", "", pageTemplate.ExecuteTemplate(w, "layout", data)) != nil {
 		return // an error has occurred and was processed
 	}
@@ -82,22 +83,24 @@ func (fh *FrontendHandler) getHealthPageData() (*HealthPage, error) {
 		clientData := fh.getHealthPageClientData(client)
 		pageData.Clients = append(pageData.Clients, clientData)
 	}
+
 	pageData.ClientCount = uint64(len(pageData.Clients))
 
 	// get blocks
 	for _, block := range fh.pool.GetBlockCache().GetCachedBlocks() {
-
 		blockData := &HealthPageBlock{
 			Slot:   uint64(block.Slot),
 			Root:   block.Root[:],
 			SeenBy: []string{},
 		}
+
 		for _, client := range block.GetSeenBy() {
 			blockData.SeenBy = append(blockData.SeenBy, client.GetName())
 		}
 
 		pageData.Blocks = append(pageData.Blocks, blockData)
 	}
+
 	pageData.BlockCount = uint64(len(pageData.Blocks))
 
 	// get forks
@@ -105,6 +108,7 @@ func (fh *FrontendHandler) getHealthPageData() (*HealthPage, error) {
 		if fork == nil {
 			continue
 		}
+
 		forkData := &HealthPageFork{
 			HeadSlot: uint64(fork.Slot),
 			HeadRoot: fork.Root[:],
@@ -121,31 +125,36 @@ func (fh *FrontendHandler) getHealthPageData() (*HealthPage, error) {
 			}
 			forkData.Clients = append(forkData.Clients, forkClient)
 		}
+
 		sort.Slice(forkData.Clients, func(a, b int) bool {
 			return forkData.Clients[a].Client.Index < forkData.Clients[b].Client.Index
 		})
+
 		forkData.ClientCount = uint64(len(forkData.Clients))
 	}
+
 	pageData.ForkCount = uint64(len(pageData.Forks))
 
 	return pageData, nil
 }
 
-func (fh *FrontendHandler) getHealthPageClientData(client *pool.PoolClient) *HealthPageClient {
+func (fh *FrontendHandler) getHealthPageClientData(client *pool.Client) *HealthPageClient {
 	headSlot, headRoot := client.GetLastHead()
 	clientData := &HealthPageClient{
 		Index:       int(client.GetIndex()),
 		Name:        client.GetName(),
 		Version:     client.GetVersion(),
-		Type:        uint64(client.GetClientType()),
+		Type:        int8(client.GetClientType()),
 		HeadSlot:    uint64(headSlot),
 		HeadRoot:    headRoot[:],
 		LastRefresh: client.GetLastEventTime(),
 		IsReady:     fh.pool.GetCanonicalFork().IsClientReady(client),
 	}
+
 	if lastError := client.GetLastError(); lastError != nil {
 		clientData.LastError = lastError.Error()
 	}
+
 	switch client.GetStatus() {
 	case pool.ClientStatusOffline:
 		clientData.Status = "offline"
@@ -156,5 +165,6 @@ func (fh *FrontendHandler) getHealthPageClientData(client *pool.PoolClient) *Hea
 	case pool.ClientStatusSynchronizing:
 		clientData.Status = "synchronizing"
 	}
+
 	return clientData
 }
