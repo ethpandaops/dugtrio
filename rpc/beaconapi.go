@@ -32,6 +32,7 @@ func NewBeaconClient(endpointCfg *types.EndpointConfig) (*BeaconClient, error) {
 		endpoint: endpointCfg.Url,
 		headers:  endpointCfg.Headers,
 	}
+
 	return client, nil
 }
 
@@ -61,20 +62,24 @@ func (bc *BeaconClient) Initialize(ctx context.Context) error {
 	}
 
 	bc.clientSvc = clientSvc
+
 	return nil
 }
 
 func (bc *BeaconClient) GetGenesis() (*v1.Genesis, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
 	provider, isProvider := bc.clientSvc.(eth2client.GenesisProvider)
 	if !isProvider {
 		return nil, fmt.Errorf("get genesis not supported")
 	}
+
 	result, err := provider.Genesis(ctx)
 	if err != nil {
 		return nil, err
 	}
+
 	return result, nil
 }
 
@@ -83,10 +88,12 @@ func (bc *BeaconClient) GetNodeSyncing(ctx context.Context) (*v1.SyncState, erro
 	if !isProvider {
 		return nil, fmt.Errorf("get node syncing not supported")
 	}
+
 	result, err := provider.NodeSyncing(ctx)
 	if err != nil {
 		return nil, err
 	}
+
 	return result, nil
 }
 
@@ -101,10 +108,12 @@ func (bc *BeaconClient) GetNodeVersion(ctx context.Context) (string, error) {
 	if !isProvider {
 		return "", fmt.Errorf("get node version not supported")
 	}
+
 	result, err := provider.NodeVersion(ctx)
 	if err != nil {
 		return "", err
 	}
+
 	return result, nil
 }
 
@@ -113,10 +122,12 @@ func (bc *BeaconClient) GetConfigSpecs(ctx context.Context) (map[string]interfac
 	if !isProvider {
 		return nil, fmt.Errorf("get specs not supported")
 	}
+
 	result, err := provider.Spec(ctx)
 	if err != nil {
 		return nil, err
 	}
+
 	return result, nil
 }
 
@@ -125,10 +136,12 @@ func (bc *BeaconClient) GetLatestBlockHead(ctx context.Context) (*v1.BeaconBlock
 	if !isProvider {
 		return nil, fmt.Errorf("get beacon block headers not supported")
 	}
+
 	result, err := provider.BeaconBlockHeader(ctx, "head")
 	if err != nil {
 		return nil, err
 	}
+
 	return result, nil
 }
 
@@ -137,10 +150,12 @@ func (bc *BeaconClient) GetFinalityCheckpoints(ctx context.Context) (*v1.Finalit
 	if !isProvider {
 		return nil, fmt.Errorf("get finality not supported")
 	}
+
 	result, err := provider.Finality(ctx, "head")
 	if err != nil {
 		return nil, err
 	}
+
 	return result, nil
 }
 
@@ -149,10 +164,12 @@ func (bc *BeaconClient) GetBlockHeaderByBlockroot(ctx context.Context, blockroot
 	if !isProvider {
 		return nil, fmt.Errorf("get beacon block headers not supported")
 	}
+
 	result, err := provider.BeaconBlockHeader(ctx, fmt.Sprintf("0x%x", blockroot))
 	if err != nil {
 		return nil, err
 	}
+
 	return result, nil
 }
 
@@ -161,9 +178,11 @@ func (bc *BeaconClient) GetBlockHeaderBySlot(ctx context.Context, slot phase0.Sl
 	if !isProvider {
 		return nil, fmt.Errorf("get beacon block headers not supported")
 	}
+
 	result, err := provider.BeaconBlockHeader(ctx, fmt.Sprintf("%d", slot))
 	if err != nil {
 		return nil, err
 	}
+
 	return result, nil
 }

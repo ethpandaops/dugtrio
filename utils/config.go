@@ -34,10 +34,12 @@ func readConfigFile(cfg *types.Config, path string) error {
 	defer f.Close()
 
 	decoder := yaml.NewDecoder(f)
+
 	err = decoder.Decode(cfg)
 	if err != nil {
 		return fmt.Errorf("error decoding explorer config: %v", err)
 	}
+
 	return nil
 }
 

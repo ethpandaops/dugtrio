@@ -50,7 +50,9 @@ func (pool *BeaconPool) newPoolClient(clientIdx uint16, endpoint *types.Endpoint
 		logger:         logrus.WithField("client", endpoint.Name),
 	}
 	client.resetContext()
+
 	go client.runPoolClientLoop()
+
 	return &client, nil
 }
 

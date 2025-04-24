@@ -64,6 +64,7 @@ func Subscribe(url, lastEventId string) (*Stream, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	return SubscribeWithRequest(lastEventId, req)
 }
 
@@ -91,7 +92,9 @@ func SubscribeWith(lastEventId string, client *http.Client, request *http.Reques
 	if err != nil {
 		return nil, err
 	}
+
 	go stream.stream(r)
+
 	return stream, nil
 }
 
@@ -100,6 +103,7 @@ func (stream *Stream) Close() {
 	go func() {
 		stream.closeMutex.Lock()
 		defer stream.closeMutex.Unlock()
+
 		if stream.isClosed {
 			return
 		}
@@ -116,24 +120,30 @@ func checkRedirect(req *http.Request, via []*http.Request) error {
 	if len(via) >= 10 {
 		return errors.New("stopped after 10 redirects")
 	}
+
 	for k, vv := range via[0].Header {
 		for _, v := range vv {
 			req.Header.Add(k, v)
 		}
 	}
+
 	return nil
 }
 
 func (stream *Stream) connect() (r io.ReadCloser, err error) {
 	var resp *http.Response
+
 	stream.req.Header.Set("Cache-Control", "no-cache")
 	stream.req.Header.Set("Accept", "text/event-stream")
+
 	if len(stream.lastEventId) > 0 {
 		stream.req.Header.Set("Last-Event-ID", stream.lastEventId)
 	}
+
 	if resp, err = stream.c.Do(stream.req); err != nil {
 		return
 	}
+
 	if resp.StatusCode != 200 {
 		message, _ := io.ReadAll(resp.Body)
 		err = SubscriptionError{
@@ -141,7 +151,9 @@ func (stream *Stream) connect() (r io.ReadCloser, err error) {
 			Message: string(message),
 		}
 	}
+
 	r = resp.Body
+
 	return
 }
 
@@ -162,39 +174,52 @@ func (stream *Stream) receiveEvents(r io.ReadCloser) {
 
 	for {
 		ev, err := dec.Decode()
+
 		stream.closeMutex.Lock()
+
 		if stream.isClosed {
 			stream.closeMutex.Unlock()
+
 			return
 		}
+
 		if err != nil {
 			stream.Errors <- err
 			stream.closeMutex.Unlock()
+
 			return
 		}
+
 		stream.closeMutex.Unlock()
 
 		pub := ev.(StreamEvent)
+
 		if pub.Retry() > 0 {
 			stream.retry = time.Duration(pub.Retry()) * time.Millisecond
 		}
+
 		if len(pub.Id()) > 0 {
 			stream.lastEventId = pub.Id()
 		}
+
 		stream.Events <- pub
 	}
 }
 
 func (stream *Stream) retryRestartStream() {
 	backoff := stream.retry
+
 	for {
 		if stream.Logger != nil {
 			stream.Logger.Printf("Reconnecting in %0.4f secs\n", backoff.Seconds())
 		}
+
 		time.Sleep(backoff)
+
 		if stream.isClosed {
 			return
 		}
+
 		// NOTE: because of the defer we're opening the new connection
 		// before closing the old one. Shouldn't be a problem in practice,
 		// but something to be aware of.
@@ -203,10 +228,13 @@ func (stream *Stream) retryRestartStream() {
 			go stream.stream(r)
 			return
 		}
+
 		if stream.isClosed {
 			return
 		}
+
 		stream.Errors <- err
+
 		backoff = 10 * time.Second
 	}
 }

@@ -82,10 +82,12 @@ func (proxy *BeaconProxy) getSessionForRequest(r *http.Request, ident string) *P
 func (proxy *BeaconProxy) GetSessions() []*ProxySession {
 	proxy.sessionMutex.Lock()
 	defer proxy.sessionMutex.Unlock()
+
 	sessions := []*ProxySession{}
 	for _, session := range proxy.sessions {
 		sessions = append(sessions, session)
 	}
+
 	sort.Slice(sessions, func(a, b int) bool {
 		return sessions[b].firstSeen.After(sessions[a].firstSeen)
 	})

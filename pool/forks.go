@@ -36,21 +36,27 @@ func (pool *BeaconPool) GetHeadForks() []*HeadFork {
 	}
 
 	headForks := []*HeadFork{}
+
 	for _, client := range pool.clients {
 		cHeadSlot, cHeadRoot := client.GetLastHead()
+
 		var matchingFork *HeadFork
+
 		for _, fork := range headForks {
 			if bytes.Equal(fork.Root[:], cHeadRoot[:]) || pool.blockCache.IsCanonicalBlock(cHeadRoot, fork.Root) {
 				matchingFork = fork
 				break
 			}
+
 			if pool.blockCache.IsCanonicalBlock(fork.Root, cHeadRoot) {
 				fork.Root = cHeadRoot
 				fork.Slot = cHeadSlot
 				matchingFork = fork
+
 				break
 			}
 		}
+
 		if matchingFork == nil {
 			matchingFork = &HeadFork{
 				Root:       cHeadRoot,
@@ -62,17 +68,21 @@ func (pool *BeaconPool) GetHeadForks() []*HeadFork {
 			matchingFork.AllClients = append(matchingFork.AllClients, client)
 		}
 	}
+
 	for _, fork := range headForks {
 		fork.ReadyClients = make([]*PoolClient, 0)
 		for _, client := range fork.AllClients {
 			if client.GetStatus() != ClientStatusOnline {
 				continue
 			}
+
 			var headDistance uint64 = 0
+
 			_, cHeadRoot := client.GetLastHead()
 			if !bytes.Equal(fork.Root[:], cHeadRoot[:]) {
 				_, headDistance = pool.blockCache.GetBlockDistance(cHeadRoot, fork.Root)
 			}
+
 			if headDistance <= pool.config.MaxHeadDistance {
 				fork.ReadyClients = append(fork.ReadyClients, client)
 			}
@@ -94,10 +104,12 @@ func (fork *HeadFork) IsClientReady(client *PoolClient) bool {
 	if fork == nil {
 		return false
 	}
+
 	for _, cli := range fork.ReadyClients {
 		if cli.clientIdx == client.clientIdx {
 			return true
 		}
 	}
+
 	return false
 }

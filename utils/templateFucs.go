@@ -48,6 +48,7 @@ func checkInList(item, list string) bool {
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -61,9 +62,11 @@ func IncludeHTML(path string) template.HTML {
 }
 
 func FormatTimeDiff(ts time.Time) template.HTML {
-	duration := time.Until(ts)
 	var timeStr string
+
+	duration := time.Until(ts)
 	absDuraction := duration.Abs()
+
 	if absDuraction < 1*time.Second {
 		return template.HTML("now")
 	} else if absDuraction < 60*time.Second {
@@ -75,6 +78,7 @@ func FormatTimeDiff(ts time.Time) template.HTML {
 	} else {
 		timeStr = fmt.Sprintf("%v day.", uint(absDuraction.Hours()/24))
 	}
+
 	if duration < 0 {
 		return template.HTML(fmt.Sprintf("%v ago", timeStr))
 	} else {

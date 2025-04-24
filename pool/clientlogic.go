@@ -116,6 +116,7 @@ func (client *PoolClient) runPoolClient() error {
 
 	// process events
 	client.lastEvent = time.Now()
+
 	for {
 		var syncCheckTimeout time.Duration = time.Since(client.lastSyncCheck)
 		if syncCheckTimeout > 30*time.Second {
@@ -133,12 +134,14 @@ func (client *PoolClient) runPoolClient() error {
 		select {
 		case evt := <-blockStream.EventChan:
 			now := time.Now()
+
 			switch evt.Event {
 			case rpc.StreamBlockEvent:
 				client.processBlockEvent(evt.Data.(*v1.BlockEvent))
 			case rpc.StreamFinalizedEvent:
 				client.processFinalizedEvent(evt.Data.(*v1.FinalizedCheckpointEvent))
 			}
+
 			client.logger.Tracef("event (%v) processing time: %v ms", evt.Event, time.Since(now).Milliseconds())
 			client.lastEvent = time.Now()
 		case ready := <-blockStream.ReadyChan:
@@ -158,11 +161,13 @@ func (client *PoolClient) runPoolClient() error {
 			}
 		case <-time.After(eventTimeout):
 			client.logger.Debug("no head event since 30 secs, polling chain head")
+
 			err := client.pollClientHead()
 			if err != nil {
 				client.updateStatus(false, client.isSyncing, client.isOptimistic)
 				return err
 			}
+
 			client.lastEvent = time.Now()
 		}
 	}
@@ -194,15 +199,18 @@ func (client *PoolClient) processBlockEvent(evt *v1.BlockEvent) error {
 		err := currentBlock.EnsureHeader(func() (*phase0.SignedBeaconBlockHeader, error) {
 			ctx, cancel := context.WithTimeout(client.clientCtx, 10*time.Second)
 			defer cancel()
+
 			header, err := client.rpcClient.GetBlockHeaderByBlockroot(ctx, currentBlock.Root)
 			if err != nil {
 				return nil, err
 			}
+
 			return header.Header, nil
 		})
 		if err != nil {
 			return err
 		}
+
 		currentBlock.SetSeenBy(client)
 	}
 

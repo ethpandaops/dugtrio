@@ -102,20 +102,25 @@ func (proxyMetrics *ProxyMetrics) trimApiPath(apiPath string) string {
 	if queryPos := strings.Index(apiPath, "?"); queryPos > -1 {
 		apiPath = apiPath[:queryPos]
 	}
+
 	pathParts := strings.Split(apiPath, "/")
+
 	for i, pathPart := range pathParts {
 		if i < 2 {
 			continue
 		}
+
 		if strings.HasPrefix(pathPart, "0x") {
 			pathParts[i] = "{hex}"
 			continue
 		}
+
 		_, err := strconv.ParseUint(pathPart, 10, 64)
 		if err == nil {
 			pathParts[i] = "{id}"
 			continue
 		}
 	}
+
 	return strings.Join(pathParts, "/")
 }

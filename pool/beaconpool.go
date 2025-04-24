@@ -32,6 +32,7 @@ func NewBeaconPool(config *types.PoolConfig) (*BeaconPool, error) {
 		clients:       make([]*PoolClient, 0),
 		rrLastIndexes: map[ClientType]uint16{},
 	}
+
 	var err error
 
 	switch config.SchedulerMode {
@@ -55,10 +56,12 @@ func (pool *BeaconPool) GetBlockCache() *BlockCache {
 func (pool *BeaconPool) AddEndpoint(endpoint *types.EndpointConfig) (*PoolClient, error) {
 	clientIdx := pool.clientCounter
 	pool.clientCounter++
+
 	client, err := pool.newPoolClient(clientIdx, endpoint)
 	if err != nil {
 		return nil, err
 	}
+
 	pool.clients = append(pool.clients, client)
 	return client, nil
 }
@@ -108,18 +111,22 @@ func (pool *BeaconPool) runClientScheduler(readyClients []*PoolClient, clientTyp
 	switch pool.schedulerMode {
 	case RoundRobinScheduler:
 		var firstReadyClient *PoolClient
+
 		for _, client := range readyClients {
 			if clientType != UnspecifiedClient && clientType != client.clientType {
 				continue
 			}
+
 			if firstReadyClient == nil {
 				firstReadyClient = client
 			}
+
 			if client.clientIdx > pool.rrLastIndexes[clientType] {
 				pool.rrLastIndexes[clientType] = client.clientIdx
 				return client
 			}
 		}
+
 		if firstReadyClient == nil {
 			return nil
 		} else {

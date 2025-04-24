@@ -75,25 +75,30 @@ func NewBeaconProxy(config *types.ProxyConfig, pool *pool.BeaconPool, proxyMetri
 
 	blockedPaths := []string{}
 	blockedPaths = append(blockedPaths, config.BlockedPaths...)
+
 	for _, blockedPath := range strings.Split(config.BlockedPathsStr, ",") {
 		blockedPath = strings.Trim(blockedPath, " ")
 		if blockedPath == "" {
 			continue
 		}
+
 		blockedPaths = append(blockedPaths, blockedPath)
 	}
+
 	for _, blockedPath := range blockedPaths {
 		blockedPathPattern, err := regexp.Compile(blockedPath)
 		if err != nil {
 			proxy.logger.Errorf("error parsing blocked path pattern '%v': %v", blockedPath, err)
 			continue
 		}
+
 		proxy.blockedPaths = append(proxy.blockedPaths, *blockedPathPattern)
 	}
 
 	if config.CallTimeout == 0 {
 		config.CallTimeout = 60 * time.Second
 	}
+
 	if config.SessionTimeout == 0 {
 		config.SessionTimeout = 10 * time.Minute
 	}
@@ -227,6 +232,7 @@ func (proxy *BeaconProxy) rebalanceSessions() {
 	defer proxy.sessionMutex.Unlock()
 
 	totalSessions := 0
+
 	for _, session := range proxy.sessions {
 		if session.lastPoolClient != nil && slices.Contains(readyClients, session.lastPoolClient) {
 			endpointCounts[session.lastPoolClient]++
@@ -238,8 +244,9 @@ func (proxy *BeaconProxy) rebalanceSessions() {
 	idealCount := float64(totalSessions) / float64(len(readyClients))
 
 	// Check if any endpoint exceeds threshold
-	var diff float64
-	var absDiff int
+	diff := 0.0
+	absDiff := 0
+
 	needsRebalance := func() bool {
 		for _, count := range endpointCounts {
 			diff = math.Abs(float64(count)-idealCount) / idealCount
@@ -265,6 +272,7 @@ func (proxy *BeaconProxy) rebalanceSessions() {
 				count  int
 			}
 			counts := make([]endpointCount, 0, len(endpointCounts))
+
 			for client, count := range endpointCounts {
 				counts = append(counts, endpointCount{client, count})
 			}
@@ -278,11 +286,14 @@ func (proxy *BeaconProxy) rebalanceSessions() {
 			})
 
 			var targetClient *pool.PoolClient
+
 			var targetCountsIndex int
+
 			for i := len(counts) - 1; i > 0; i-- {
 				if slices.Contains(readyClients, counts[i].client) {
 					targetClient = counts[i].client
 					targetCountsIndex = i
+
 					break
 				}
 			}

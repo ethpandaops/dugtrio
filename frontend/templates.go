@@ -102,16 +102,19 @@ func parseTemplateFiles(t *template.Template, readFile func(string) (string, []b
 		if err != nil {
 			return nil, err
 		}
+
 		s := string(b)
-		var tmpl *template.Template
+		tmpl := (*template.Template)(nil)
 		if t == nil {
 			t = template.New(name)
 		}
+
 		if name == t.Name() {
 			tmpl = t
 		} else {
 			tmpl = t.New(name)
 		}
+
 		_, err = tmpl.Parse(s)
 		if err != nil {
 			return nil, err
@@ -130,6 +133,7 @@ func CompileTimeCheck(fsys fs.FS) error {
 	if err != nil {
 		return err
 	}
+
 	template.Must(template.New("layout").Funcs(template.FuncMap(templateFuncs)).ParseFS(templateFiles, files...))
 	logger.Infof("compile time check completed")
 
@@ -148,6 +152,7 @@ func getFileSysNames(fsys fs.FS, dirname string) ([]string, error) {
 		if err != nil {
 			return nil, fmt.Errorf("error returning file info err: %w", err)
 		}
+
 		if !f.IsDir() {
 			files = append(files, filepath.Join(dirname, info.Name()))
 		} else {
@@ -155,6 +160,7 @@ func getFileSysNames(fsys fs.FS, dirname string) ([]string, error) {
 			if err != nil {
 				return nil, err
 			}
+
 			files = append(files, names...)
 		}
 	}
