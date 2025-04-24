@@ -1,10 +1,19 @@
-version: 2
 updates:
-   - package-ecosystem: github-actions
-     directory: /
-     schedule:
-        interval: monthly
-     groups:
-        actions:
-           patterns:
-              - '*'
+- directory: /
+  groups:
+    dependencies:
+      patterns:
+      - '*'
+  open-pull-requests-limit: 10
+  package-ecosystem: gomod
+  schedule:
+    interval: weekly
+- directory: /
+  groups:
+    actions:
+      patterns:
+      - '*'
+  package-ecosystem: github-actions
+  schedule:
+    interval: monthly
+version: 2
