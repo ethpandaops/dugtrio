@@ -24,7 +24,8 @@ func HandleSubroutinePanic(identifier string, restartFn func()) {
 		if restartFn != nil {
 			time.Sleep(5 * time.Second)
 			logrus.Infof("restarting %v subroutine", identifier)
-			restartFn()
+
+			go restartFn()
 		}
 	}
 }
