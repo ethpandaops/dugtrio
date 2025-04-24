@@ -126,8 +126,6 @@ func (bc *BeaconClient) GetLatestBlockHead(ctx context.Context) (*v1.BeaconBlock
 	if !isProvider {
 		return nil, fmt.Errorf("get beacon block headers not supported")
 	}
-	// TODO - isn't the BeaconBlockHeaderOpts struct supposed to be different?
-	// TODO same with FinalityOps, etc (seems they should contain a CommonOpts field)
 	result, err := provider.BeaconBlockHeader(ctx, &api.BeaconBlockHeaderOpts{Block: "head"})
 	if err != nil {
 		return nil, err
