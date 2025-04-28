@@ -312,6 +312,7 @@ func (client *Client) setFinalizedHead(epoch phase0.Epoch, root phase0.Root) {
 
 	if bytes.Equal(client.finalizedRoot[:], root[:]) {
 		client.headMutex.Unlock()
+		return
 	}
 
 	client.finalizedEpoch = epoch
