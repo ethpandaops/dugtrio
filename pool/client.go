@@ -30,6 +30,7 @@ type Client struct {
 	retryCounter    uint64
 	lastError       error
 	headMutex       sync.RWMutex
+	statusMutex     sync.RWMutex
 	headRoot        phase0.Root
 	headSlot        phase0.Slot
 	finalizedRoot   phase0.Root
@@ -96,6 +97,9 @@ func (client *Client) GetLastEventTime() time.Time {
 }
 
 func (client *Client) GetStatus() ClientStatus {
+	client.statusMutex.RLock()
+	defer client.statusMutex.RUnlock()
+
 	switch {
 	case client.isSyncing:
 		return ClientStatusSynchronizing

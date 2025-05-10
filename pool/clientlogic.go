@@ -200,6 +200,9 @@ func (client *Client) runPoolClient() error {
 }
 
 func (client *Client) updateStatus(online, syncing, optimistic bool) {
+	client.statusMutex.Lock()
+	defer client.statusMutex.Unlock()
+
 	oldStatus := client.GetStatus()
 
 	client.isOnline = online
