@@ -63,10 +63,10 @@ type BeaconProxy struct {
 	sessions     map[string]*Session
 }
 
-func NewBeaconProxy(config *types.ProxyConfig, pool *pool.BeaconPool, proxyMetrics *metrics.ProxyMetrics) (*BeaconProxy, error) {
+func NewBeaconProxy(config *types.ProxyConfig, beaconPool *pool.BeaconPool, proxyMetrics *metrics.ProxyMetrics) (*BeaconProxy, error) {
 	proxy := BeaconProxy{
 		config:       config,
-		pool:         pool,
+		pool:         beaconPool,
 		proxyMetrics: proxyMetrics,
 		logger:       logrus.WithField("module", "proxy"),
 		blockedPaths: []*regexp.Regexp{},
@@ -232,9 +232,9 @@ func (proxy *BeaconProxy) processCall(w http.ResponseWriter, r *http.Request, cl
 	}
 }
 
-func (proxy *BeaconProxy) checkBlockedPaths(url *url.URL) bool {
+func (proxy *BeaconProxy) checkBlockedPaths(reqURL *url.URL) bool {
 	for _, blockedPathPattern := range proxy.blockedPaths {
-		match := blockedPathPattern.MatchString(url.EscapedPath())
+		match := blockedPathPattern.MatchString(reqURL.EscapedPath())
 		if match {
 			return true
 		}
