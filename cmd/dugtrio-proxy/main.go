@@ -96,7 +96,7 @@ func startDugtrio(config *types.Config) {
 	}
 
 	if config.Frontend.Enabled {
-		frontend, err := frontend.NewFrontend(config.Frontend)
+		frontendBaseHandler, err := frontend.NewFrontend(config.Frontend)
 		if err != nil {
 			logrus.Fatalf("error initializing frontend: %v", err)
 		}
@@ -106,7 +106,7 @@ func startDugtrio(config *types.Config) {
 		router.HandleFunc("/", frontendHandler.Index).Methods("GET")
 		router.HandleFunc("/health", frontendHandler.Health).Methods("GET")
 		router.HandleFunc("/sessions", frontendHandler.Sessions).Methods("GET")
-		router.PathPrefix("/").Handler(frontend)
+		router.PathPrefix("/").Handler(frontendBaseHandler)
 	}
 
 	// start http server
