@@ -44,6 +44,57 @@ make
 Dugtrio needs a configuration file with a list of client endpoints to use.
 Create a copy of [dugtrio-config.example.yaml](https://github.com/ethpandaops/dugtrio/blob/master/dugtrio-config.example.yaml) and change it for your needs.
 
+## Header Fields for Client-Specific Routing
+
+Dugtrio supports various header fields that enable you to specify which client endpoint should handle your request:
+
+### Request Headers
+
+**`X-Dugtrio-Next-Endpoint`**
+- **Purpose**: Route requests to a specific beacon client type
+- **Supported Values**: `lighthouse`, `lodestar`, `nimbus`, `prysm`, `teku`, `grandine`, `caplin`
+- **Alternative**: Can also be specified as query parameter `dugtrio-next-endpoint`
+- **Examples**: 
+  ```bash
+  # Using curl with header
+  curl -H "X-Dugtrio-Next-Endpoint: lighthouse" https://your-dugtrio-proxy.com/eth/v1/node/version
+  
+  # Using query parameter instead
+  curl https://your-dugtrio-proxy.com/eth/v1/node/version?dugtrio-next-endpoint=teku
+  
+  # Route to specific client for beacon state
+  curl -H "X-Dugtrio-Next-Endpoint: nimbus" https://your-dugtrio-proxy.com/eth/v1/beacon/states/head/root
+  ```
+
+### Response Headers (Informational)
+
+Dugtrio automatically adds these headers to responses for monitoring and debugging:
+
+**`X-Dugtrio-Endpoint-Name`**
+- Shows the name of the endpoint that processed the request
+
+**`X-Dugtrio-Endpoint-Type`**
+- Shows the client type that processed the request
+
+**`X-Dugtrio-Endpoint-Version`**
+- Shows the version of the endpoint that processed the request
+
+**`X-Dugtrio-Session-Ip`**
+- Shows the IP address of the session that made the request
+
+**`X-Dugtrio-Session-Tokens`**
+- Shows remaining rate limit tokens for the session
+
+### Alternative Routing Methods
+
+In addition to headers, you can also route to specific clients using URL prefixes:
+- `/lighthouse/` - Routes to Lighthouse clients
+- `/lodestar/` - Routes to Lodestar clients
+- `/nimbus/` - Routes to Nimbus clients
+- `/prysm/` - Routes to Prysm clients
+- `/teku/` - Routes to Teku clients
+- `/grandine/` - Routes to Grandine clients
+
 ## Contact
 
 pk910 - @pk910
