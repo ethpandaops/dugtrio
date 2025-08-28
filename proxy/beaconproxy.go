@@ -187,12 +187,25 @@ func (proxy *BeaconProxy) processCall(w http.ResponseWriter, r *http.Request, cl
 	}
 
 	if nextEndpoint != "" {
+		endpoint = nil
+
 		nextEndpointType := pool.ParseClientType(nextEndpoint)
 		if nextEndpointType != pool.UnknownClient {
 			clientType = nextEndpointType
-		}
+		} else if client := proxy.pool.GetEndpointByName(nextEndpoint); client != nil {
+			endpoint = client
+			clientType = pool.UnspecifiedClient
+		} else {
+			w.Header().Set("Content-Type", "text/html")
+			w.WriteHeader(http.StatusServiceUnavailable)
 
-		endpoint = nil
+			_, err := w.Write([]byte("No Endpoint matches X-Dugtrio-Next-Endpoint filter"))
+			if err != nil {
+				proxy.logger.Warnf("error writing no endpoint available response: %v", err)
+			}
+
+			return
+		}
 	}
 
 	if endpoint == nil || (clientType != pool.UnspecifiedClient && endpoint.GetClientType() != clientType) {
