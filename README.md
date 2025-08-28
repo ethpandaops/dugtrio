@@ -52,7 +52,7 @@ Dugtrio supports various header fields that enable you to specify which client e
 
 **`X-Dugtrio-Next-Endpoint`**
 - **Purpose**: Route requests to a specific beacon client type
-- **Supported Values**: `lighthouse`, `lodestar`, `nimbus`, `prysm`, `teku`, `grandine`, `caplin`
+- **Supported Values**: `lighthouse`, `lodestar`, `nimbus`, `prysm`, `teku`, `grandine`, `caplin` or individual client names
 - **Alternative**: Can also be specified as query parameter `dugtrio-next-endpoint`
 - **Examples**: 
   ```bash
