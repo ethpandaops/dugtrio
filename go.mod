@@ -1,6 +1,6 @@
 module github.com/ethpandaops/dugtrio
 
-go 1.24
+go 1.24.0
 
 require (
 	github.com/attestantio/go-eth2-client v0.26.0
@@ -8,12 +8,12 @@ require (
 	github.com/gorilla/mux v1.8.1
 	github.com/kelseyhightower/envconfig v1.4.0
 	github.com/mashingan/smapping v0.1.19
-	github.com/prometheus/client_golang v1.23.0
+	github.com/prometheus/client_golang v1.23.2
 	github.com/rs/zerolog v1.34.0
 	github.com/sirupsen/logrus v1.9.3
 	github.com/tdewolff/minify v2.3.6+incompatible
 	github.com/urfave/negroni v1.0.0
-	golang.org/x/time v0.12.0
+	golang.org/x/time v0.13.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
@@ -37,7 +37,7 @@ require (
 	github.com/pk910/dynamic-ssz v0.0.4 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/prometheus/client_model v0.6.2 // indirect
-	github.com/prometheus/common v0.65.0 // indirect
+	github.com/prometheus/common v0.66.1 // indirect
 	github.com/prometheus/procfs v0.16.1 // indirect
 	github.com/prysmaticlabs/go-bitfield v0.0.0-20240618144021-706c95b2dd15 // indirect
 	github.com/r3labs/sse/v2 v2.10.0 // indirect
@@ -46,12 +46,13 @@ require (
 	go.opentelemetry.io/otel v1.16.0 // indirect
 	go.opentelemetry.io/otel/metric v1.16.0 // indirect
 	go.opentelemetry.io/otel/trace v1.16.0 // indirect
-	golang.org/x/crypto v0.38.0 // indirect
-	golang.org/x/net v0.40.0 // indirect
+	go.yaml.in/yaml/v2 v2.4.2 // indirect
+	golang.org/x/crypto v0.41.0 // indirect
+	golang.org/x/net v0.43.0 // indirect
 	golang.org/x/sync v0.13.0 // indirect
-	golang.org/x/sys v0.33.0 // indirect
+	golang.org/x/sys v0.35.0 // indirect
 	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
-	google.golang.org/protobuf v1.36.6 // indirect
+	google.golang.org/protobuf v1.36.8 // indirect
 	gopkg.in/Knetic/govaluate.v3 v3.0.0 // indirect
 	gopkg.in/cenkalti/backoff.v1 v1.1.0 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
