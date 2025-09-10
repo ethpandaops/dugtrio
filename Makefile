@@ -6,7 +6,7 @@ GOLDFLAGS += -X 'github.com/ethpandaops/dugtrio/utils.BuildVersion="$(VERSION)"'
 GOLDFLAGS += -X 'github.com/ethpandaops/dugtrio/utils.BuildTime="$(BUILDTIME)"'
 GOLDFLAGS += -X 'github.com/ethpandaops/dugtrio/utils.BuildRelease="$(RELEASE)"'
 
-.PHONY: all test clean
+.PHONY: all test clean devnet devnet-run devnet-clean
 
 all: build
 
@@ -19,3 +19,12 @@ build:
 
 clean:
 	rm -f bin/*
+
+devnet:
+	.hack/devnet/run.sh
+
+devnet-run: devnet build
+	go run cmd/dugtrio-proxy/main.go --config .hack/devnet/generated-dugtrio-config.yaml
+
+devnet-clean:
+	.hack/devnet/cleanup.sh
