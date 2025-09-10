@@ -8,14 +8,14 @@
           <table class="table table-nobr" id="clients">
             <thead>
               <tr>
-                <th>#</th>
-                <th>Name</th>
-                <th>Head Slot</th>
-                <th>Head Root</th>
-                <th>Status</th>
-                <th>Useable</th>
-                <th>Type</th>
-                <th>Version</th>
+                <th><a href="#" class="sort-header text-decoration-none" data-sort="index"># <i class="fa fa-sort"></i></a></th>
+                <th><a href="#" class="sort-header text-decoration-none" data-sort="name">Name <i class="fa fa-sort"></i></a></th>
+                <th><a href="#" class="sort-header text-decoration-none" data-sort="headslot">Head Slot <i class="fa fa-sort"></i></a></th>
+                <th><a href="#" class="sort-header text-decoration-none" data-sort="headroot">Head Root <i class="fa fa-sort"></i></a></th>
+                <th><a href="#" class="sort-header text-decoration-none" data-sort="status">Status <i class="fa fa-sort"></i></a></th>
+                <th><a href="#" class="sort-header text-decoration-none" data-sort="useable">Useable <i class="fa fa-sort"></i></a></th>
+                <th><a href="#" class="sort-header text-decoration-none" data-sort="type">Type <i class="fa fa-sort"></i></a></th>
+                <th><a href="#" class="sort-header text-decoration-none" data-sort="version">Version <i class="fa fa-sort"></i></a></th>
               </tr>
             </thead>
               <tbody>
@@ -189,6 +189,75 @@
 
 
 {{ define "js" }}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Handle sorting for client table
+    const sortHeaders = document.querySelectorAll('.sort-header');
+    const urlParams = new URLSearchParams(window.location.search);
+    const currentSort = urlParams.get('sort');
+    const currentOrder = urlParams.get('order') || 'asc';
+
+    // Update header appearance based on current sort
+    if (currentSort) {
+        sortHeaders.forEach(header => {
+            const sortBy = header.getAttribute('data-sort');
+            const icon = header.querySelector('i');
+            if (sortBy === currentSort) {
+                if (currentOrder === 'asc') {
+                    icon.className = 'fa fa-sort-up';
+                } else {
+                    icon.className = 'fa fa-sort-down';
+                }
+            }
+        });
+    }
+
+    // Add click handlers
+    sortHeaders.forEach(header => {
+        header.addEventListener('click', function(e) {
+            e.preventDefault();
+            const sortBy = this.getAttribute('data-sort');
+            let order = 'asc';
+            
+            // Toggle order if clicking on currently sorted column
+            if (currentSort === sortBy && currentOrder === 'asc') {
+                order = 'desc';
+            }
+            
+            // Build new URL with sort parameters
+            const newParams = new URLSearchParams(window.location.search);
+            newParams.set('sort', sortBy);
+            newParams.set('order', order);
+            
+            // Redirect to sorted page
+            window.location.href = window.location.pathname + '?' + newParams.toString();
+        });
+    });
+});
+</script>
 {{ end }}
 {{ define "css" }}
+<style>
+.sort-header {
+    color: inherit !important;
+    cursor: pointer;
+    user-select: none;
+    display: inline-block;
+    width: 100%;
+}
+
+.sort-header:hover {
+    color: #0d6efd !important;
+    text-decoration: none !important;
+}
+
+.sort-header i {
+    margin-left: 4px;
+    opacity: 0.6;
+}
+
+.sort-header:hover i {
+    opacity: 1;
+}
+</style>
 {{ end }}
