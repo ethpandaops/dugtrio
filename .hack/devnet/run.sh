@@ -37,50 +37,17 @@ server:
 endpoints:
 EOF
 
-# Add beacon endpoints
+# Add beacon endpoints (using same logic as dora)
 for node in $BEACON_NODES; do
     name=$(docker inspect -f "{{ with index .Config.Labels \"com.kurtosistech.id\"}}{{.}}{{end}}" $node)
-    client_type=$(docker inspect -f "{{ with index .Config.Labels \"com.kurtosistech.custom.ethereum-package.cl-client-type\"}}{{.}}{{end}}" $node)
     ip=$(echo '127.0.0.1')
-    
-    # Try different beacon ports based on client type
-    port=""
-    case $client_type in
-        lighthouse)
-            port=$(docker inspect --format='{{ (index (index .NetworkSettings.Ports "5052/tcp") 0).HostPort }}' $node 2>/dev/null)
-            ;;
-        prysm)
-            port=$(docker inspect --format='{{ (index (index .NetworkSettings.Ports "3500/tcp") 0).HostPort }}' $node 2>/dev/null)
-            ;;
-        teku)
-            port=$(docker inspect --format='{{ (index (index .NetworkSettings.Ports "5051/tcp") 0).HostPort }}' $node 2>/dev/null)
-            ;;
-        nimbus)
-            port=$(docker inspect --format='{{ (index (index .NetworkSettings.Ports "5052/tcp") 0).HostPort }}' $node 2>/dev/null)
-            ;;
-        lodestar)
-            port=$(docker inspect --format='{{ (index (index .NetworkSettings.Ports "9596/tcp") 0).HostPort }}' $node 2>/dev/null)
-            ;;
-        grandine)
-            port=$(docker inspect --format='{{ (index (index .NetworkSettings.Ports "5052/tcp") 0).HostPort }}' $node 2>/dev/null)
-            ;;
-        *)
-            # Default fallback - try common beacon ports
-            port=$(docker inspect --format='{{ (index (index .NetworkSettings.Ports "5052/tcp") 0).HostPort }}' $node 2>/dev/null)
-            if [ -z "$port" ]; then
-                port=$(docker inspect --format='{{ (index (index .NetworkSettings.Ports "3500/tcp") 0).HostPort }}' $node 2>/dev/null)
-            fi
-            if [ -z "$port" ]; then
-                port=$(docker inspect --format='{{ (index (index .NetworkSettings.Ports "5051/tcp") 0).HostPort }}' $node 2>/dev/null)
-            fi
-            ;;
-    esac
-    
+    port=$(docker inspect --format='{{ (index (index .NetworkSettings.Ports "3500/tcp") 0).HostPort }}' $node 2>/dev/null)
     if [ -z "$port" ]; then
-        echo "Warning: Could not find beacon port for $name ($client_type), skipping..."
-        continue
+      port=$(docker inspect --format='{{ (index (index .NetworkSettings.Ports "4000/tcp") 0).HostPort }}' $node)
     fi
-    
+    if [ -z "$port" ]; then
+      port="65535"
+    fi
     echo "  - name: \"$name\"" >> "${__dir}/generated-dugtrio-config.yaml"
     echo "    url: \"http://$ip:$port\"" >> "${__dir}/generated-dugtrio-config.yaml"
 done

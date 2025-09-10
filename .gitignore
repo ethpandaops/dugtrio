@@ -5,3 +5,4 @@ dist/
 tmp-*
 dugtrio-config.yaml
 dugtrio-log.log
+.hack/devnet/generated-dugtrio-config.yaml
