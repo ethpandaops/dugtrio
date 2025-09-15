@@ -3,6 +3,7 @@ package handlers
 import (
 	"net/http"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/ethpandaops/dugtrio/frontend"
@@ -60,7 +61,11 @@ func (fh *FrontendHandler) Health(w http.ResponseWriter, r *http.Request) {
 
 	var pageError error
 
-	data.Data, pageError = fh.getHealthPageData()
+	// Parse sorting parameters
+	sortBy := r.URL.Query().Get("sort")
+	sortOrder := r.URL.Query().Get("order")
+
+	data.Data, pageError = fh.getHealthPageData(sortBy, sortOrder)
 	if pageError != nil {
 		frontend.HandlePageError(w, r, pageError)
 		return
@@ -73,7 +78,7 @@ func (fh *FrontendHandler) Health(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (fh *FrontendHandler) getHealthPageData() (*HealthPage, error) {
+func (fh *FrontendHandler) getHealthPageData(sortBy, sortOrder string) (*HealthPage, error) {
 	pageData := &HealthPage{
 		Clients: []*HealthPageClient{},
 	}
@@ -83,6 +88,9 @@ func (fh *FrontendHandler) getHealthPageData() (*HealthPage, error) {
 		clientData := fh.getHealthPageClientData(client)
 		pageData.Clients = append(pageData.Clients, clientData)
 	}
+
+	// Sort clients based on parameters
+	fh.sortClients(pageData.Clients, sortBy, sortOrder)
 
 	pageData.ClientCount = uint64(len(pageData.Clients))
 
@@ -167,4 +175,45 @@ func (fh *FrontendHandler) getHealthPageClientData(client *pool.Client) *HealthP
 	}
 
 	return clientData
+}
+
+// sortClients sorts the client slice based on the provided sort field and order
+func (fh *FrontendHandler) sortClients(clients []*HealthPageClient, sortBy, sortOrder string) {
+	if sortBy == "" {
+		return
+	}
+
+	ascending := sortOrder != "desc"
+
+	sort.Slice(clients, func(i, j int) bool {
+		var less bool
+
+		switch strings.ToLower(sortBy) {
+		case "index", "#":
+			less = clients[i].Index < clients[j].Index
+		case "name":
+			less = strings.ToLower(clients[i].Name) < strings.ToLower(clients[j].Name)
+		case "headslot", "head_slot":
+			less = clients[i].HeadSlot < clients[j].HeadSlot
+		case "headroot", "head_root":
+			less = string(clients[i].HeadRoot) < string(clients[j].HeadRoot)
+		case "status":
+			less = strings.ToLower(clients[i].Status) < strings.ToLower(clients[j].Status)
+		case "useable", "ready":
+			less = !clients[i].IsReady && clients[j].IsReady
+		case "type":
+			less = clients[i].Type < clients[j].Type
+		case "version":
+			less = strings.ToLower(clients[i].Version) < strings.ToLower(clients[j].Version)
+		default:
+			// Default to index sorting
+			less = clients[i].Index < clients[j].Index
+		}
+
+		if ascending {
+			return less
+		}
+
+		return !less
+	})
 }

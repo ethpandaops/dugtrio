@@ -1,0 +1,187 @@
+
+name: Build master
+
+on:
+  push:
+    branches:
+      - 'master'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+
+  check_source:
+    name: "Run code checks"
+    uses: ./.github/workflows/_shared-check.yaml
+
+  build_binaries:
+    name: "Build dugtrio"
+    needs: [check_source]
+    uses: ./.github/workflows/_shared-build.yaml
+    with:
+      ref: ${{ github.sha }}
+      release: "snapshot"
+      docker: true
+      docker_repository: "ethpandaops/dugtrio"
+      docker_tag_prefix: "master"
+      additional_tags: "['master','master-latest']"
+    secrets:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+
+  create_snapshot_release:
+    name: Create snapshot release
+    needs: [build_binaries]
+    runs-on: ubuntu-latest
+    steps:
+    # download build artifacts
+    - name: "Download build artifacts"
+      uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+
+    # (re)create snapshot binary release
+    - name: Update snapshot tag & remove previous snapshot release
+      uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+      with:
+        github-token: ${{secrets.GITHUB_TOKEN}}
+        script: |
+          try {
+            var snapshotTag = "snapshot";
+            var snapshotRelease = await github.rest.repos.getReleaseByTag({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              tag: snapshotTag
+            });
+            if(snapshotRelease && snapshotRelease.data && snapshotRelease.data.tag_name == snapshotTag) {
+              console.log("delete previous snapshot release");
+              await github.rest.repos.deleteRelease({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                release_id: snapshotRelease.data.id
+              });
+            }
+
+            var snapshotRef = await github.rest.git.getRef({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: "tags/" + snapshotTag
+            });
+            if(snapshotRef && snapshotRef.data && snapshotRef.data.ref) {
+              if(snapshotRef.data.object.sha !== context.sha) {
+                await github.rest.git.updateRef({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  ref: "tags/" + snapshotTag,
+                  sha: context.sha,
+                });
+              }
+            }
+            else {
+              await github.rest.git.createRef({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                ref: "tags/" + snapshotTag,
+                sha: context.sha,
+              });
+            }
+          } catch (e) {
+            console.log(e)
+          }
+    - name: Create snapshot release
+      uses: actions/create-release@0cb9c9b65d5d1901c1f53e5e66eaf4afd303e70e # v1.1.4
+      id: create_release
+      with:
+        draft: false
+        prerelease: true
+        release_name: "Dev Snapshot"
+        tag_name: "snapshot"
+        body: |
+          ## Latest automatically built executables. (Unstable development snapshot)
+          Built from master branch (commit: ${{ github.sha }})
+
+          ### Release Artifacts
+          | Release File  | Description |
+          | ------------- | ------------- |
+          | [dugtrio_snapshot_windows_amd64.zip](https://github.com/ethpandaops/dugtrio/releases/download/snapshot/dugtrio_snapshot_windows_amd64.zip) | dugtrio executables for windows/amd64 |
+          | [dugtrio_snapshot_linux_amd64.tar.gz](https://github.com/ethpandaops/dugtrio/releases/download/snapshot/dugtrio_snapshot_linux_amd64.tar.gz) | dugtrio executables for linux/amd64 |
+          | [dugtrio_snapshot_linux_arm64.tar.gz](https://github.com/ethpandaops/dugtrio/releases/download/snapshot/dugtrio_snapshot_linux_arm64.tar.gz) | dugtrio executables for linux/arm64 |
+          | [dugtrio_snapshot_darwin_amd64.tar.gz](https://github.com/ethpandaops/dugtrio/releases/download/snapshot/dugtrio_snapshot_darwin_amd64.tar.gz) | dugtrio executable for macos/amd64 |
+          | [dugtrio_snapshot_darwin_arm64.tar.gz](https://github.com/ethpandaops/dugtrio/releases/download/snapshot/dugtrio_snapshot_darwin_arm64.tar.gz) | dugtrio executable for macos/arm64 |
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
+
+    # generate & upload release artifacts
+    - name: "Generate release package: dugtrio_snapshot_windows_amd64.zip"
+      run: |
+        cd dugtrio_windows_amd64
+        zip -r -q ../dugtrio_snapshot_windows_amd64.zip .
+    - name: "Upload snapshot release artifact: dugtrio_snapshot_windows_amd64.zip"
+      uses: actions/upload-release-asset@e8f9f06c4b078e705bd2ea027f0926603fc9b4d5 # v1.0.2
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./dugtrio_snapshot_windows_amd64.zip
+        asset_name: dugtrio_snapshot_windows_amd64.zip
+        asset_content_type: application/octet-stream
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
+    
+    - name: "Generate release package: dugtrio_snapshot_linux_amd64.tar.gz"
+      run: |
+        cd dugtrio_linux_amd64
+        tar -czf ../dugtrio_snapshot_linux_amd64.tar.gz .
+    - name: "Upload snapshot release artifact: dugtrio_snapshot_linux_amd64.tar.gz"
+      uses: actions/upload-release-asset@e8f9f06c4b078e705bd2ea027f0926603fc9b4d5 # v1.0.2
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./dugtrio_snapshot_linux_amd64.tar.gz
+        asset_name: dugtrio_snapshot_linux_amd64.tar.gz
+        asset_content_type: application/octet-stream
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
+    
+    - name: "Generate release package: dugtrio_snapshot_linux_arm64.tar.gz"
+      run: |
+        cd dugtrio_linux_arm64
+        tar -czf ../dugtrio_snapshot_linux_arm64.tar.gz .
+    - name: "Upload snapshot release artifact: dugtrio_snapshot_linux_arm64.tar.gz"
+      uses: actions/upload-release-asset@e8f9f06c4b078e705bd2ea027f0926603fc9b4d5 # v1.0.2
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./dugtrio_snapshot_linux_arm64.tar.gz
+        asset_name: dugtrio_snapshot_linux_arm64.tar.gz
+        asset_content_type: application/octet-stream
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
+    
+    - name: "Generate release package: dugtrio_snapshot_darwin_amd64.tar.gz"
+      run: |
+        cd dugtrio_darwin_amd64
+        tar -czf ../dugtrio_snapshot_darwin_amd64.tar.gz .
+    - name: "Upload snapshot release artifact: dugtrio_snapshot_darwin_amd64.tar.gz"
+      uses: actions/upload-release-asset@e8f9f06c4b078e705bd2ea027f0926603fc9b4d5 # v1.0.2
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./dugtrio_snapshot_darwin_amd64.tar.gz
+        asset_name: dugtrio_snapshot_darwin_amd64.tar.gz
+        asset_content_type: application/octet-stream
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
+
+    - name: "Generate release package: dugtrio_snapshot_darwin_arm64.tar.gz"
+      run: |
+        cd dugtrio_darwin_arm64
+        tar -czf ../dugtrio_snapshot_darwin_arm64.tar.gz .
+    - name: "Upload snapshot release artifact: dugtrio_snapshot_darwin_arm64.tar.gz"
+      uses: actions/upload-release-asset@e8f9f06c4b078e705bd2ea027f0926603fc9b4d5 # v1.0.2
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./dugtrio_snapshot_darwin_arm64.tar.gz
+        asset_name: dugtrio_snapshot_darwin_arm64.tar.gz
+        asset_content_type: application/octet-stream
+      env:
+        GITHUB_TOKEN: ${{ github.token }}

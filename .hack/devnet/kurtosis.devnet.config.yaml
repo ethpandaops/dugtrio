@@ -1,0 +1,16 @@
+participants_matrix:
+  el:
+    - el_type: geth
+      el_image: ethpandaops/geth:master
+    - el_type: besu
+      el_image: ethpandaops/besu:main
+    - el_type: nethermind
+      el_image: ethpandaops/nethermind:master
+  cl:
+    - cl_type: lighthouse
+      cl_image: ethpandaops/lighthouse:unstable
+      supernode: true
+
+additional_services:
+  - dugtrio
+

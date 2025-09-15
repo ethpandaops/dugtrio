@@ -72,6 +72,16 @@ func (pool *BeaconPool) GetAllEndpoints() []*Client {
 	return pool.clients
 }
 
+func (pool *BeaconPool) GetEndpointByName(name string) *Client {
+	for _, client := range pool.clients {
+		if client.GetName() == name {
+			return client
+		}
+	}
+
+	return nil
+}
+
 func (pool *BeaconPool) GetReadyEndpoint(clientType ClientType) *Client {
 	canonicalFork := pool.GetCanonicalFork()
 	if canonicalFork == nil {
