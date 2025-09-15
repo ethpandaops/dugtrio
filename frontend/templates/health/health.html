@@ -191,13 +191,13 @@
 {{ define "js" }}
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    // Handle sorting for client table
+    /* Handle sorting for client table */
     const sortHeaders = document.querySelectorAll('.sort-header');
     const urlParams = new URLSearchParams(window.location.search);
     const currentSort = urlParams.get('sort');
     const currentOrder = urlParams.get('order') || 'asc';
 
-    // Update header appearance based on current sort
+    /* Update header appearance based on current sort */
     if (currentSort) {
         sortHeaders.forEach(header => {
             const sortBy = header.getAttribute('data-sort');
@@ -212,24 +212,24 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // Add click handlers
+    /* Add click handlers */
     sortHeaders.forEach(header => {
         header.addEventListener('click', function(e) {
             e.preventDefault();
             const sortBy = this.getAttribute('data-sort');
             let order = 'asc';
             
-            // Toggle order if clicking on currently sorted column
+            /* Toggle order if clicking on currently sorted column */
             if (currentSort === sortBy && currentOrder === 'asc') {
                 order = 'desc';
             }
             
-            // Build new URL with sort parameters
+            /* Build new URL with sort parameters */
             const newParams = new URLSearchParams(window.location.search);
             newParams.set('sort', sortBy);
             newParams.set('order', order);
             
-            // Redirect to sorted page
+            /* Redirect to sorted page */
             window.location.href = window.location.pathname + '?' + newParams.toString();
         });
     });
