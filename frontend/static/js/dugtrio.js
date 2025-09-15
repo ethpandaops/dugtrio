@@ -13,11 +13,9 @@
   };
 
   function initControls() {
-    // init tooltips
     document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(initTooltip);
     cleanupTooltips();
 
-    // init clipboard buttons
     document.querySelectorAll("[data-clipboard-text]").forEach(initCopyBtn);
     document.querySelectorAll("[data-clipboard-target]").forEach(initCopyBtn);
   }
@@ -25,7 +23,6 @@
   function initTooltip(el) {
     if($(el).data("tooltip-init"))
       return;
-    //console.log("init tooltip", el);
     var idx = tooltipIdx++;
     $(el).data("tooltip-init", idx).attr("data-tooltip-idx", idx.toString());
     $(el).tooltip();
