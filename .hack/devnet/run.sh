@@ -78,7 +78,7 @@ proxy:
 
 frontend:
   enabled: true
-  minify: false
+  minify: true
   siteName: "Dugtrio Devnet"
   pprof: true
 
