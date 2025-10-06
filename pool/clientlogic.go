@@ -45,15 +45,10 @@ func (client *Client) checkPoolClient() error {
 		return fmt.Errorf("initialization of attestantio/go-eth2-client failed: %w", err)
 	}
 
-	// get node version
-	nodeVersion, err := client.rpcClient.GetNodeVersion(ctx)
+	err = client.updateMetaData()
 	if err != nil {
-		return fmt.Errorf("error while fetching node version: %v", err)
+		return err
 	}
-
-	client.versionStr = nodeVersion
-
-	client.parseClientVersion(nodeVersion)
 
 	// get & comare chain specs
 	specs, err := client.rpcClient.GetConfigSpecs(ctx)
@@ -94,6 +89,32 @@ func (client *Client) checkSyncStatus() error {
 	return nil
 }
 
+func (client *Client) updateMetaData() error {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// get node version
+	nodeVersion, err := client.rpcClient.GetNodeVersion(ctx)
+	if err != nil {
+		return fmt.Errorf("error while fetching node version: %v", err)
+	}
+
+	client.versionStr = nodeVersion
+
+	client.parseClientVersion(nodeVersion)
+
+	// get node identity
+	nodeIdentity, err := client.rpcClient.GetNodeIdentity(ctx)
+	if err != nil {
+		return fmt.Errorf("error while fetching node identity: %v", err)
+	}
+
+	client.custodyGroupCount = nodeIdentity.GetCustodyGroupCount()
+
+	client.lastMetaDataCheck = time.Now()
+	return nil
+}
+
 func (client *Client) runPoolClient() error {
 	// get latest header
 	err := client.pollClientHead()
@@ -130,6 +151,13 @@ func (client *Client) runPoolClient() error {
 			syncCheckTimeout = 0
 		} else {
 			syncCheckTimeout = 30*time.Second - syncCheckTimeout
+		}
+
+		metaDataTimeout := time.Since(client.lastMetaDataCheck)
+		if metaDataTimeout > 300*time.Second {
+			metaDataTimeout = 0
+		} else {
+			metaDataTimeout = 300*time.Second - metaDataTimeout
 		}
 
 		eventTimeout := time.Since(client.lastEvent)
@@ -184,6 +212,11 @@ func (client *Client) runPoolClient() error {
 			if err != nil {
 				client.updateStatus(false, client.isSyncing, client.isOptimistic)
 				return err
+			}
+		case <-time.After(metaDataTimeout):
+			err := client.updateMetaData()
+			if err != nil {
+				client.logger.Warnf("error updating meta data: %v", err)
 			}
 		case <-time.After(eventTimeout):
 			client.logger.Debug("no head event since 30 secs, polling chain head")

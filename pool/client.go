@@ -13,27 +13,29 @@ import (
 )
 
 type Client struct {
-	beaconPool      *BeaconPool
-	clientIdx       uint16
-	endpointConfig  *types.EndpointConfig
-	clientCtx       context.Context
-	clientCtxCancel context.CancelFunc
-	rpcClient       *rpc.BeaconClient
-	logger          *logrus.Entry
-	isOnline        bool
-	isSyncing       bool
-	isOptimistic    bool
-	versionStr      string
-	clientType      ClientType
-	lastEvent       time.Time
-	lastSyncCheck   time.Time
-	retryCounter    uint64
-	lastError       error
-	headMutex       sync.RWMutex
-	headRoot        phase0.Root
-	headSlot        phase0.Slot
-	finalizedRoot   phase0.Root
-	finalizedEpoch  phase0.Epoch
+	beaconPool        *BeaconPool
+	clientIdx         uint16
+	endpointConfig    *types.EndpointConfig
+	clientCtx         context.Context
+	clientCtxCancel   context.CancelFunc
+	rpcClient         *rpc.BeaconClient
+	logger            *logrus.Entry
+	isOnline          bool
+	isSyncing         bool
+	isOptimistic      bool
+	custodyGroupCount uint16
+	versionStr        string
+	clientType        ClientType
+	lastEvent         time.Time
+	lastSyncCheck     time.Time
+	lastMetaDataCheck time.Time
+	retryCounter      uint64
+	lastError         error
+	headMutex         sync.RWMutex
+	headRoot          phase0.Root
+	headSlot          phase0.Slot
+	finalizedRoot     phase0.Root
+	finalizedEpoch    phase0.Epoch
 }
 
 func (pool *BeaconPool) newPoolClient(clientIdx uint16, endpoint *types.EndpointConfig) (*Client, error) {
@@ -106,4 +108,8 @@ func (client *Client) GetStatus() ClientStatus {
 	default:
 		return ClientStatusOffline
 	}
+}
+
+func (client *Client) GetCustodyGroupCount() uint16 {
+	return client.custodyGroupCount
 }

@@ -22,16 +22,17 @@ type HealthPage struct {
 }
 
 type HealthPageClient struct {
-	Index       int       `json:"index"`
-	Name        string    `json:"name"`
-	Version     string    `json:"version"`
-	Type        int8      `json:"type"`
-	HeadSlot    uint64    `json:"head_slot"`
-	HeadRoot    []byte    `json:"head_root"`
-	Status      string    `json:"status"`
-	LastRefresh time.Time `json:"refresh"`
-	LastError   string    `json:"error"`
-	IsReady     bool      `json:"ready"`
+	Index             int       `json:"index"`
+	Name              string    `json:"name"`
+	Version           string    `json:"version"`
+	Type              int8      `json:"type"`
+	HeadSlot          uint64    `json:"head_slot"`
+	HeadRoot          []byte    `json:"head_root"`
+	Status            string    `json:"status"`
+	LastRefresh       time.Time `json:"refresh"`
+	LastError         string    `json:"error"`
+	IsReady           bool      `json:"ready"`
+	CustodyGroupCount int       `json:"custody_group_count"`
 }
 
 type HealthPageBlock struct {
@@ -149,14 +150,15 @@ func (fh *FrontendHandler) getHealthPageData(sortBy, sortOrder string) (*HealthP
 func (fh *FrontendHandler) getHealthPageClientData(client *pool.Client) *HealthPageClient {
 	headSlot, headRoot := client.GetLastHead()
 	clientData := &HealthPageClient{
-		Index:       int(client.GetIndex()),
-		Name:        client.GetName(),
-		Version:     client.GetVersion(),
-		Type:        int8(client.GetClientType()),
-		HeadSlot:    uint64(headSlot),
-		HeadRoot:    headRoot[:],
-		LastRefresh: client.GetLastEventTime(),
-		IsReady:     fh.pool.GetCanonicalFork().IsClientReady(client),
+		Index:             int(client.GetIndex()),
+		Name:              client.GetName(),
+		Version:           client.GetVersion(),
+		Type:              int8(client.GetClientType()),
+		HeadSlot:          uint64(headSlot),
+		HeadRoot:          headRoot[:],
+		LastRefresh:       client.GetLastEventTime(),
+		IsReady:           fh.pool.GetCanonicalFork().IsClientReady(client),
+		CustodyGroupCount: int(client.GetCustodyGroupCount()),
 	}
 
 	if lastError := client.GetLastError(); lastError != nil {
@@ -205,6 +207,8 @@ func (fh *FrontendHandler) sortClients(clients []*HealthPageClient, sortBy, sort
 			less = clients[i].Type < clients[j].Type
 		case "version":
 			less = strings.ToLower(clients[i].Version) < strings.ToLower(clients[j].Version)
+		case "cgc", "custody_group_count":
+			less = clients[i].CustodyGroupCount < clients[j].CustodyGroupCount
 		default:
 			// Default to index sorting
 			less = clients[i].Index < clients[j].Index
