@@ -41,10 +41,12 @@ func GetTemplate(files ...string) *template.Template {
 	}
 
 	templateCacheMux.RLock()
+
 	if templateCache[name] != nil {
 		defer templateCacheMux.RUnlock()
 		return templateCache[name]
 	}
+
 	templateCacheMux.RUnlock()
 
 	tmpl := template.New(name).Funcs(templateFuncs)

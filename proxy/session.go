@@ -185,6 +185,7 @@ func (session *Session) addActiveContext(cancel context.CancelFunc) uint64 {
 func (session *Session) removeActiveContext(id uint64) {
 	session.activeContexts.Lock()
 	defer session.activeContexts.Unlock()
+
 	delete(session.activeContexts.contexts, id)
 }
 

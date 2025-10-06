@@ -17,7 +17,6 @@ func (client *Client) runPoolClientLoop() {
 
 	for {
 		err := client.checkPoolClient()
-
 		if err == nil {
 			err = client.runPoolClient()
 		}
@@ -112,6 +111,7 @@ func (client *Client) updateMetaData() error {
 	client.custodyGroupCount = nodeIdentity.GetCustodyGroupCount()
 
 	client.lastMetaDataCheck = time.Now()
+
 	return nil
 }
 
@@ -166,6 +166,7 @@ func (client *Client) runPoolClient() error {
 		} else {
 			eventTimeout = 30*time.Second - eventTimeout
 		}
+
 		select {
 		case evt := <-blockStream.EventChan:
 			now := time.Now()

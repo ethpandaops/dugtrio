@@ -98,6 +98,7 @@ func (bs *BeaconStream) startStream() {
 				bs.ReadyChan <- true
 			case err := <-stream.Errors:
 				logger.WithField("client", bs.client.name).Warnf("beacon block stream error: %v", err)
+
 				bs.ReadyChan <- false
 			}
 		}
@@ -161,6 +162,7 @@ func (bs *BeaconStream) subscribeStream(endpoint string, events uint16) *eventst
 
 		if err != nil {
 			logger.WithField("client", bs.client.name).Warnf("Error while subscribing beacon event stream %v: %v", utils.GetRedactedURL(url), err)
+
 			select {
 			case <-bs.killChan:
 				return nil

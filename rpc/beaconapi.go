@@ -172,6 +172,7 @@ func (bc *BeaconClient) GetNodeIdentity(ctx context.Context) (*NodeIdentity, err
 	if err != nil {
 		return nil, fmt.Errorf("error retrieving node identity: %v", err)
 	}
+
 	return response.Data, nil
 }
 

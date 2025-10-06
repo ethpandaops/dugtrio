@@ -129,6 +129,7 @@ func (pool *BeaconPool) runClientScheduler(readyClients []*Client, clientType Cl
 				filteredClients = append(filteredClients, client)
 			}
 		}
+
 		readyClients = filteredClients
 	}
 

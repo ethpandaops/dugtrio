@@ -16,14 +16,19 @@ type NodeIdentity struct {
 }
 
 func (nodeIdentity *NodeIdentity) GetCustodyGroupCount() uint16 {
-	switch nodeIdentity.Metadata.CustodyGroupCount.(type) {
+	switch v := nodeIdentity.Metadata.CustodyGroupCount.(type) {
 	case int:
-		return uint16(nodeIdentity.Metadata.CustodyGroupCount.(int))
+		if v < 0 || v > 65535 {
+			return 0
+		}
+
+		return uint16(v)
 	case string:
-		count, err := strconv.ParseUint(nodeIdentity.Metadata.CustodyGroupCount.(string), 10, 16)
+		count, err := strconv.ParseUint(v, 10, 16)
 		if err != nil {
 			return 0
 		}
+
 		return uint16(count)
 	default:
 		return 0
