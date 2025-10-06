@@ -17,6 +17,7 @@ type HeadFork struct {
 func (pool *BeaconPool) resetHeadForkCache() {
 	pool.forkCacheMutex.Lock()
 	defer pool.forkCacheMutex.Unlock()
+
 	pool.forkCache = nil
 }
 

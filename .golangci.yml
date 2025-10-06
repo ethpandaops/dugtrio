@@ -22,7 +22,7 @@ linters:
     - tparallel
     - unconvert
     - whitespace
-    - wsl
+    - wsl_v5
   settings:
     errcheck:
       check-type-assertions: true
@@ -39,6 +39,13 @@ linters:
     nolintlint:
       require-explanation: true
       require-specific: true
+    revive:
+      rules:
+        - name: var-naming
+          disabled: true
+    wsl_v5:
+      allow-first-in-block: true
+      allow-whole-block: false
   exclusions:
     generated: lax
     presets:

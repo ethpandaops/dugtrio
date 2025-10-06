@@ -2,7 +2,10 @@ package rpc
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
+	nethttp "net/http"
 	"time"
 
 	eth2client "github.com/attestantio/go-eth2-client"
@@ -62,6 +65,47 @@ func (bc *BeaconClient) Initialize(ctx context.Context) error {
 	return nil
 }
 
+func (bc *BeaconClient) getJSON(ctx context.Context, requrl string, returnValue interface{}) error {
+	logurl := getRedactedURL(requrl)
+
+	req, err := nethttp.NewRequestWithContext(ctx, "GET", requrl, nethttp.NoBody)
+	if err != nil {
+		return err
+	}
+
+	for headerKey, headerVal := range bc.headers {
+		req.Header.Set(headerKey, headerVal)
+	}
+
+	client := &nethttp.Client{Timeout: time.Second * 300}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+
+	defer resp.Body.Close()
+
+	if resp.StatusCode != nethttp.StatusOK {
+		if resp.StatusCode == nethttp.StatusNotFound {
+			return fmt.Errorf("not found")
+		}
+
+		data, _ := io.ReadAll(resp.Body)
+
+		return fmt.Errorf("url: %v, error-response: %s", logurl, data)
+	}
+
+	dec := json.NewDecoder(resp.Body)
+
+	err = dec.Decode(&returnValue)
+	if err != nil {
+		return fmt.Errorf("error parsing json response: %v", err)
+	}
+
+	return nil
+}
+
 func (bc *BeaconClient) GetGenesis() (*v1.Genesis, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -117,6 +161,19 @@ func (bc *BeaconClient) GetNodeVersion(ctx context.Context) (string, error) {
 	}
 
 	return result.Data, nil
+}
+
+func (bc *BeaconClient) GetNodeIdentity(ctx context.Context) (*NodeIdentity, error) {
+	response := struct {
+		Data *NodeIdentity `json:"data"`
+	}{}
+
+	err := bc.getJSON(ctx, fmt.Sprintf("%s/eth/v1/node/identity", bc.endpoint), &response)
+	if err != nil {
+		return nil, fmt.Errorf("error retrieving node identity: %v", err)
+	}
+
+	return response.Data, nil
 }
 
 func (bc *BeaconClient) GetConfigSpecs(ctx context.Context) (map[string]interface{}, error) {

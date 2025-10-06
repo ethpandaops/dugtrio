@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"fmt"
 	"math"
 	"net/http"
 	"net/url"
@@ -176,41 +177,17 @@ func (proxy *BeaconProxy) processCall(w http.ResponseWriter, r *http.Request, cl
 		return
 	}
 
-	var endpoint *pool.Client
-	if proxy.config.StickyEndpoint && proxy.pool.IsClientReady(session.lastPoolClient) {
-		endpoint = session.lastPoolClient
-	}
+	endpoint, err := proxy.getEndpointForCall(r, session, clientType)
+	if err != nil {
+		w.Header().Set("Content-Type", "text/html")
+		w.WriteHeader(http.StatusServiceUnavailable)
 
-	nextEndpoint := r.Header.Get("X-Dugtrio-Next-Endpoint")
-	if nextEndpoint == "" {
-		nextEndpoint = r.URL.Query().Get("dugtrio-next-endpoint")
-	}
-
-	if nextEndpoint != "" {
-		endpoint = nil
-
-		nextEndpointType := pool.ParseClientType(nextEndpoint)
-		if nextEndpointType != pool.UnknownClient {
-			clientType = nextEndpointType
-		} else if client := proxy.pool.GetEndpointByName(nextEndpoint); client != nil {
-			endpoint = client
-			clientType = pool.UnspecifiedClient
-		} else {
-			w.Header().Set("Content-Type", "text/html")
-			w.WriteHeader(http.StatusServiceUnavailable)
-
-			_, err := w.Write([]byte("No Endpoint matches X-Dugtrio-Next-Endpoint filter"))
-			if err != nil {
-				proxy.logger.Warnf("error writing no endpoint available response: %v", err)
-			}
-
-			return
+		_, err := w.Write([]byte(err.Error()))
+		if err != nil {
+			proxy.logger.Warnf("error writing no endpoint available response: %v", err)
 		}
-	}
 
-	if endpoint == nil || (clientType != pool.UnspecifiedClient && endpoint.GetClientType() != clientType) {
-		endpoint = proxy.pool.GetReadyEndpoint(clientType)
-		session.setLastPoolClient(endpoint)
+		return
 	}
 
 	if endpoint == nil {
@@ -227,7 +204,7 @@ func (proxy *BeaconProxy) processCall(w http.ResponseWriter, r *http.Request, cl
 
 	session.requests.Add(1)
 
-	err := proxy.processProxyCall(w, r, session, endpoint)
+	err = proxy.processProxyCall(w, r, session, endpoint)
 	if err != nil {
 		w.Header().Set("Content-Type", "text/html")
 		w.WriteHeader(http.StatusInternalServerError)
@@ -254,6 +231,57 @@ func (proxy *BeaconProxy) checkBlockedPaths(reqURL *url.URL) bool {
 	}
 
 	return false
+}
+
+func (proxy *BeaconProxy) getEndpointForCall(r *http.Request, session *Session, clientType pool.ClientType) (*pool.Client, error) {
+	var endpoint *pool.Client
+	if proxy.config.StickyEndpoint && proxy.pool.IsClientReady(session.lastPoolClient) {
+		endpoint = session.lastPoolClient
+	}
+
+	minCgc := uint16(0)
+	if strings.HasPrefix(r.URL.Path, "/eth/v1/beacon/blobs/") {
+		minCgc = 64 // 64 is the minimum CGC for blobs
+	}
+
+	nextEndpoint := r.Header.Get("X-Dugtrio-Next-Endpoint")
+	if nextEndpoint == "" {
+		nextEndpoint = r.URL.Query().Get("dugtrio-next-endpoint")
+	}
+
+	if nextEndpoint != "" {
+		endpoint = nil
+
+		nextEndpointType := pool.ParseClientType(nextEndpoint)
+		if nextEndpointType != pool.UnknownClient {
+			clientType = nextEndpointType
+		} else if client := proxy.pool.GetEndpointByName(nextEndpoint); client != nil {
+			if client.GetCustodyGroupCount() < minCgc {
+				return nil, fmt.Errorf("endpoint %s has too low CGC (%d < %d)", nextEndpoint, client.GetCustodyGroupCount(), minCgc)
+			}
+
+			endpoint = client
+			clientType = pool.UnspecifiedClient
+		} else {
+			return nil, fmt.Errorf("no endpoint matches X-Dugtrio-Next-Endpoint filter")
+		}
+	}
+
+	if minCgc > 0 && endpoint != nil {
+		if endpoint.GetCustodyGroupCount() < minCgc {
+			endpoint = nil
+		}
+	}
+
+	if endpoint == nil || (clientType != pool.UnspecifiedClient && endpoint.GetClientType() != clientType) {
+		endpoint = proxy.pool.GetReadyEndpoint(clientType, minCgc)
+
+		if minCgc == 0 {
+			session.setLastPoolClient(endpoint)
+		}
+	}
+
+	return endpoint, nil
 }
 
 func (proxy *BeaconProxy) rebalanceSessionsLoop() {

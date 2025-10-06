@@ -82,7 +82,7 @@ func (pool *BeaconPool) GetEndpointByName(name string) *Client {
 	return nil
 }
 
-func (pool *BeaconPool) GetReadyEndpoint(clientType ClientType) *Client {
+func (pool *BeaconPool) GetReadyEndpoint(clientType ClientType, minCgc uint16) *Client {
 	canonicalFork := pool.GetCanonicalFork()
 	if canonicalFork == nil {
 		return nil
@@ -93,7 +93,7 @@ func (pool *BeaconPool) GetReadyEndpoint(clientType ClientType) *Client {
 		return nil
 	}
 
-	selectedClient := pool.runClientScheduler(readyClients, clientType)
+	selectedClient := pool.runClientScheduler(readyClients, clientType, minCgc)
 
 	return selectedClient
 }
@@ -118,9 +118,20 @@ func (pool *BeaconPool) IsClientReady(client *Client) bool {
 	return false
 }
 
-func (pool *BeaconPool) runClientScheduler(readyClients []*Client, clientType ClientType) *Client {
+func (pool *BeaconPool) runClientScheduler(readyClients []*Client, clientType ClientType, minCgc uint16) *Client {
 	pool.schedulerMutex.Lock()
 	defer pool.schedulerMutex.Unlock()
+
+	if minCgc > 0 {
+		filteredClients := make([]*Client, 0, len(readyClients))
+		for _, client := range readyClients {
+			if client.GetCustodyGroupCount() >= minCgc {
+				filteredClients = append(filteredClients, client)
+			}
+		}
+
+		readyClients = filteredClients
+	}
 
 	if pool.schedulerMode == RoundRobinScheduler {
 		var firstReadyClient *Client

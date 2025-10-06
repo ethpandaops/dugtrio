@@ -16,6 +16,7 @@
                 <th><a href="#" class="sort-header text-decoration-none" data-sort="useable">Useable <i class="fa fa-sort"></i></a></th>
                 <th><a href="#" class="sort-header text-decoration-none" data-sort="type">Type <i class="fa fa-sort"></i></a></th>
                 <th><a href="#" class="sort-header text-decoration-none" data-sort="version">Version <i class="fa fa-sort"></i></a></th>
+                <th><a href="#" class="sort-header text-decoration-none" data-sort="cgc">CGC <i class="fa fa-sort"></i></a></th>
               </tr>
             </thead>
               <tbody>
@@ -70,6 +71,9 @@
                     <td>
                       <span class="text-truncate d-inline-block" style="max-width: 400px">{{ $client.Version }}</span>
                       <i class="fa fa-copy text-muted p-1" role="button" data-bs-toggle="tooltip" title="Copy to clipboard" data-clipboard-text="{{ $client.Version }}"></i>
+                    </td>
+                    <td>
+                      {{ $client.CustodyGroupCount }}
                     </td>
                   </tr>
                 {{ end }}
@@ -238,6 +242,19 @@ document.addEventListener('DOMContentLoaded', function() {
 {{ end }}
 {{ define "css" }}
 <style>
+/* Custom container width for extra large screens */
+@media (min-width: 1400px) {
+    .container {
+        max-width: 1600px;
+    }
+}
+
+@media (min-width: 1600px) {
+    .container {
+        max-width: 1800px;
+    }
+}
+
 .sort-header {
     color: inherit !important;
     cursor: pointer;

@@ -185,6 +185,7 @@ func (stream *Stream) receiveEvents(r io.ReadCloser) {
 
 		if err != nil {
 			stream.Errors <- err
+
 			stream.closeMutex.Unlock()
 
 			return

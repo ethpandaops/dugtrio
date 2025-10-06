@@ -47,6 +47,7 @@ ctxLoop:
 		case <-time.After(timeout):
 			callContext.cancelFn()
 			callContext.cancelled = true
+
 			time.Sleep(10 * time.Millisecond)
 		}
 	}
@@ -237,6 +238,7 @@ func (proxy *BeaconProxy) processEventStreamResponse(callContext *proxyCallConte
 		}
 
 		session.updateLastSeen()
+
 		callContext.updateChan <- proxy.config.CallTimeout
 	}
 }
