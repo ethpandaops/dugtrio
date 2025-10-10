@@ -111,9 +111,17 @@ func (proxy *BeaconProxy) processProxyCall(w http.ResponseWriter, r *http.Reques
 		ContentLength: r.ContentLength,
 		Close:         r.Close,
 	}
+
 	start := time.Now()
-	client := &http.Client{Timeout: 0}
 	req = req.WithContext(callContext.context)
+
+	// Use HTTP/1.1 for POST/PUT requests with bodies to avoid HTTP/2 GOAWAY issues
+	var client *http.Client
+	if (r.Method == "POST" || r.Method == "PUT" || r.Method == "PATCH") && r.Body != nil {
+		client = proxy.http1Client
+	} else {
+		client = proxy.httpClient
+	}
 
 	resp, err := client.Do(req)
 	if err != nil {

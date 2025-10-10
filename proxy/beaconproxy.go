@@ -62,9 +62,29 @@ type BeaconProxy struct {
 
 	sessionMutex sync.Mutex
 	sessions     map[string]*Session
+	httpClient   *http.Client
+	http1Client  *http.Client
 }
 
 func NewBeaconProxy(config *types.ProxyConfig, beaconPool *pool.BeaconPool, proxyMetrics *metrics.ProxyMetrics) (*BeaconProxy, error) {
+	// Create HTTP/2 client for GET requests and other methods without bodies
+	http2Transport := &http.Transport{
+		ForceAttemptHTTP2:     true,
+		MaxIdleConns:          100,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+	}
+
+	// Create HTTP/1.1 client for POST/PUT requests with bodies to avoid GOAWAY issues
+	http1Transport := &http.Transport{
+		ForceAttemptHTTP2:     false, // Force HTTP/1.1
+		MaxIdleConns:          100,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+	}
+
 	proxy := BeaconProxy{
 		config:       config,
 		pool:         beaconPool,
@@ -72,6 +92,14 @@ func NewBeaconProxy(config *types.ProxyConfig, beaconPool *pool.BeaconPool, prox
 		logger:       logrus.WithField("module", "proxy"),
 		blockedPaths: []*regexp.Regexp{},
 		sessions:     map[string]*Session{},
+		httpClient: &http.Client{
+			Transport: http2Transport,
+			Timeout:   0,
+		},
+		http1Client: &http.Client{
+			Transport: http1Transport,
+			Timeout:   0,
+		},
 	}
 
 	blockedPaths := []string{}
