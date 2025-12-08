@@ -1,9 +1,9 @@
 module github.com/ethpandaops/dugtrio
 
-go 1.24.0
+go 1.25
 
 require (
-	github.com/attestantio/go-eth2-client v0.27.1
+	github.com/attestantio/go-eth2-client v0.27.2
 	github.com/donovanhide/eventsource v0.0.0-20210830082556-c59027999da0
 	github.com/gorilla/mux v1.8.1
 	github.com/kelseyhightower/envconfig v1.4.0
