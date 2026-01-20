@@ -15,6 +15,8 @@
                 <th>Requests</th>
                 <th>Tokens</th>
                 <th>Target</th>
+                <th>Validator Count</th>
+                <th></th>
               </tr>
             </thead>
               <tbody>
@@ -27,9 +29,46 @@
                     <td>{{ $session.Requests }}</td>
                     <td>{{ $session.Tokens }}</td>
                     <td>{{ $session.Target }}</td>
+                    <td>{{ $session.ValidatorCount }}</td>
+                    <td>
+                      {{ if gt (len $session.ValidatorStats) 0 }}
+                        <button class="btn btn-sm btn-primary" type="button" data-bs-toggle="collapse" data-bs-target="#stats{{ $session.Index }}" aria-expanded="false">
+                          Details
+                        </button>
+                      {{ end }}
+                    </td>
                   </tr>
+                  {{ if gt (len $session.ValidatorStats) 0 }}
+                    <tr>
+                      <td colspan="9" class="p-0">
+                        <div class="collapse" id="stats{{ $session.Index }}">
+                          <div class="p-3">
+                            {{ range $range := $session.AggregatedRanges }}
+                              {{ if eq $range.Start $range.End }}
+                                <span class="badge bg-secondary me-1">{{ $range.Start }}</span>
+                              {{ else }}
+                                <span class="badge bg-secondary me-1">{{ $range.Start }}-{{ $range.End }}</span>
+                              {{ end }}
+                            {{ end }}
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  {{ end }}
                 {{ end }}
               </tbody>
+              <tfoot>
+                <tr class="table-dark fw-bold">
+                  <td>-</td>
+                  <td>Totals</td>
+                  <td colspan="2">{{ .SessionCount }} clients</td>
+                  <td>{{ .TotalRequests }}</td>
+                  <td>-</td>
+                  <td>-</td>
+                  <td>{{ .TotalValidators }}</td>
+                  <td></td>
+                </tr>
+              </tfoot>
           </table>
         </div>
       </div>
