@@ -80,12 +80,13 @@ func startDugtrio(config *types.Config) {
 	router.PathPrefix("/eth/").Handler(beaconProxy)
 
 	// client specific endpoints
+	router.PathPrefix("/caplin/").Handler(beaconProxy.NewClientSpecificProxy(pool.CaplinClient))
+	router.PathPrefix("/grandine/").Handler(beaconProxy.NewClientSpecificProxy(pool.GrandineClient))
 	router.PathPrefix("/lighthouse/").Handler(beaconProxy.NewClientSpecificProxy(pool.LighthouseClient))
 	router.PathPrefix("/lodestar/").Handler(beaconProxy.NewClientSpecificProxy(pool.LodestarClient))
 	router.PathPrefix("/nimbus/").Handler(beaconProxy.NewClientSpecificProxy(pool.NimbusClient))
 	router.PathPrefix("/prysm/").Handler(beaconProxy.NewClientSpecificProxy(pool.PrysmClient))
 	router.PathPrefix("/teku/").Handler(beaconProxy.NewClientSpecificProxy(pool.TekuClient))
-	router.PathPrefix("/grandine/").Handler(beaconProxy.NewClientSpecificProxy(pool.GrandineClient))
 
 	// healthcheck endpoint
 	router.HandleFunc("/healthcheck", beaconProxy.ServeHealthCheckHTTP).Methods("GET")
