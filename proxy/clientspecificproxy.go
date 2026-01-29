@@ -27,13 +27,16 @@ func (proxy *BeaconProxy) NewClientSpecificProxy(clientType pool.ClientType) *Cl
 }
 
 func (proxy *ClientSpecificProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	// Strip the client-specific prefix from the path before forwarding
+	// Strip the client-specific prefix only for standard beacon API paths (/eth/v*)
+	// This allows both standard routes like /lodestar/eth/v1/node/version
+	// and client-specific paths like /lighthouse/syncing to work
 	if proxy.pathPrefix != "" && strings.HasPrefix(r.URL.Path, proxy.pathPrefix) {
-		r.URL.Path = strings.TrimPrefix(r.URL.Path, proxy.pathPrefix)
-		// Ensure path starts with /
-		if !strings.HasPrefix(r.URL.Path, "/") {
-			r.URL.Path = "/" + r.URL.Path
+		remainingPath := strings.TrimPrefix(r.URL.Path, proxy.pathPrefix)
+		// Only strip the prefix if the remaining path is a standard beacon API path
+		if strings.HasPrefix(remainingPath, "eth/v") {
+			r.URL.Path = "/" + remainingPath
 		}
+		// Otherwise keep the full path intact for client-specific endpoints
 	}
 
 	proxy.beaconProxy.processCall(w, r, proxy.clientType)
