@@ -18,7 +18,7 @@ func (proxy *BeaconProxy) CheckAuthorization(r *http.Request) (string, bool) {
 			}
 		}
 		// API key provided but invalid
-		return "", false
+		return "", !requireAuth
 	}
 
 	// Fall back to Basic Auth
