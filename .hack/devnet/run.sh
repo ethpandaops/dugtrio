@@ -68,8 +68,8 @@ proxy:
   callRateBurst: 1000
   blockedPaths:
     - ^/eth/v[0-9]+/debug/.*
-  authorization:
-    require: false
+  auth:
+    required: false
     password: ""
   rebalanceInterval: 10s
   rebalanceThreshold: 0.1
