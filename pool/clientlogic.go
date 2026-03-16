@@ -31,6 +31,8 @@ func (client *Client) runPoolClientLoop() {
 		client.lastEvent = time.Now()
 		client.retryCounter++
 
+		client.logger.Warnf("pool client error (retry %v): %v", client.retryCounter, err)
+
 		time.Sleep(10 * time.Second)
 	}
 }
@@ -102,13 +104,14 @@ func (client *Client) updateMetaData() error {
 
 	client.parseClientVersion(nodeVersion)
 
-	// get node identity
+	// get node identity (optional — managed/remote nodes may not expose this endpoint)
 	nodeIdentity, err := client.rpcClient.GetNodeIdentity(ctx)
 	if err != nil {
-		return fmt.Errorf("error while fetching node identity: %v", err)
+		client.logger.Warnf("could not fetch node identity (custody group count set to 0): %v", err)
+		client.custodyGroupCount = 0
+	} else {
+		client.custodyGroupCount = nodeIdentity.GetCustodyGroupCount()
 	}
-
-	client.custodyGroupCount = nodeIdentity.GetCustodyGroupCount()
 
 	client.lastMetaDataCheck = time.Now()
 

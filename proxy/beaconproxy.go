@@ -1,7 +1,8 @@
 package proxy
 
 import (
-	"fmt"
+	"context"
+	"io"
 	"math"
 	"net/http"
 	"net/url"
@@ -51,6 +52,29 @@ var passthruResponseHeaderKeys = [...]string{
 	"Location",
 	"Server",
 	"Vary",
+}
+
+// responseWriterTracker wraps http.ResponseWriter to record whether any
+// response has been committed. Used to send a 503 if no upstream succeeded.
+type responseWriterTracker struct {
+	http.ResponseWriter
+	wrote bool
+}
+
+func (rw *responseWriterTracker) WriteHeader(status int) {
+	rw.wrote = true
+	rw.ResponseWriter.WriteHeader(status)
+}
+
+func (rw *responseWriterTracker) Write(b []byte) (int, error) {
+	rw.wrote = true
+	return rw.ResponseWriter.Write(b)
+}
+
+func (rw *responseWriterTracker) Flush() {
+	if f, ok := rw.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
 }
 
 type BeaconProxy struct {
@@ -139,12 +163,13 @@ func (proxy *BeaconProxy) ServeHealthCheckHTTP(w http.ResponseWriter, _ *http.Re
 }
 
 func (proxy *BeaconProxy) processCall(w http.ResponseWriter, r *http.Request, clientType pool.ClientType) {
-	if proxy.checkBlockedPaths(r.URL) {
-		w.Header().Set("Content-Type", "text/html")
-		w.WriteHeader(http.StatusForbidden)
+	rw := &responseWriterTracker{ResponseWriter: w}
 
-		_, err := w.Write([]byte("Path Blocked"))
-		if err != nil {
+	if proxy.checkBlockedPaths(r.URL) {
+		rw.Header().Set("Content-Type", "text/plain")
+		rw.WriteHeader(http.StatusForbidden)
+
+		if _, err := rw.Write([]byte("Path Blocked")); err != nil {
 			proxy.logger.Warnf("error writing path blocked response: %v", err)
 		}
 
@@ -153,11 +178,10 @@ func (proxy *BeaconProxy) processCall(w http.ResponseWriter, r *http.Request, cl
 
 	identifier, validAuth := proxy.CheckAuthorization(r)
 	if !validAuth {
-		w.Header().Set("Content-Type", "text/html")
-		w.WriteHeader(http.StatusUnauthorized)
+		rw.Header().Set("Content-Type", "text/plain")
+		rw.WriteHeader(http.StatusUnauthorized)
 
-		_, err := w.Write([]byte("Unauthorized"))
-		if err != nil {
+		if _, err := rw.Write([]byte("Unauthorized")); err != nil {
 			proxy.logger.Warnf("error writing unauthorized response: %v", err)
 		}
 
@@ -166,59 +190,158 @@ func (proxy *BeaconProxy) processCall(w http.ResponseWriter, r *http.Request, cl
 
 	session := proxy.getSessionForRequest(r, identifier)
 	if session.checkCallLimit(1) != nil {
-		w.Header().Set("Content-Type", "text/html")
-		w.WriteHeader(http.StatusTooManyRequests)
+		rw.Header().Set("Content-Type", "text/plain")
+		rw.WriteHeader(http.StatusTooManyRequests)
 
-		_, err := w.Write([]byte("Call Limit exceeded"))
-		if err != nil {
+		if _, err := rw.Write([]byte("Call Limit exceeded")); err != nil {
 			proxy.logger.Warnf("error writing call limit exceeded response: %v", err)
 		}
 
 		return
 	}
 
-	endpoint, err := proxy.getEndpointForCall(r, session, clientType)
-	if err != nil {
-		w.Header().Set("Content-Type", "text/html")
-		w.WriteHeader(http.StatusServiceUnavailable)
+	var body []byte
 
-		_, err := w.Write([]byte(err.Error()))
+	if r.Body != nil {
+		var err error
+
+		body, err = io.ReadAll(r.Body)
 		if err != nil {
-			proxy.logger.Warnf("error writing no endpoint available response: %v", err)
-		}
+			rw.Header().Set("Content-Type", "text/plain")
+			rw.WriteHeader(http.StatusInternalServerError)
+			proxy.logger.Warnf("error reading request body: %v", err)
 
-		return
+			return
+		}
 	}
 
-	if endpoint == nil {
-		w.Header().Set("Content-Type", "text/html")
-		w.WriteHeader(http.StatusServiceUnavailable)
+	// Total budget covers the full retry chain: one callTimeout per endpoint.
+	// Using a single callTimeout for callCtx means the fallback has zero budget
+	// after the primary exhausts it (e.g. hanging during beacon restart).
+	totalTimeout := proxy.config.CallTimeout * time.Duration(len(proxy.pool.GetAllEndpoints())+1)
+	callCtx := proxy.newProxyCallContext(r.Context(), totalTimeout)
+	contextID := session.addActiveContext(callCtx.cancelFn)
 
-		_, err := w.Write([]byte("No Endpoint available"))
-		if err != nil {
-			proxy.logger.Warnf("error writing no endpoint available response: %v", err)
+	// Guard: if we exit without writing any response (e.g. all attempts timed out
+	// and callCtx was cancelled before writeProxyResponse committed headers),
+	// return 503 explicitly so the client never receives an empty 200.
+	defer func() {
+		if !rw.wrote {
+			proxy.logger.WithFields(logrus.Fields{
+				"method": utils.SanitizeLogParam(r.Method),
+				"url":    utils.SanitizeLogParam(utils.GetRedactedURL(r.URL.String())),
+			}).Warn("no response written to client — sending 503")
+			rw.ResponseWriter.Header().Set("Content-Type", "text/plain")
+			rw.ResponseWriter.WriteHeader(http.StatusServiceUnavailable)
+
+			if _, wErr := rw.ResponseWriter.Write([]byte("upstream timeout")); wErr != nil {
+				proxy.logger.Warnf("error writing upstream timeout response: %v", wErr)
+			}
 		}
+	}()
+
+	defer func() {
+		callCtx.cancelFn()
+		session.removeActiveContext(contextID)
+	}()
+
+	var tried []string
+
+	for {
+		endpoint := proxy.pool.GetReadyEndpointExcluding(clientType, tried)
+		if endpoint == nil {
+			rw.Header().Set("Content-Type", "text/plain")
+			rw.WriteHeader(http.StatusServiceUnavailable)
+
+			if _, err := rw.Write([]byte("no upstream available")); err != nil {
+				proxy.logger.Warnf("error writing no upstream response: %v", err)
+			}
+
+			return
+		}
+
+		tried = append(tried, endpoint.GetName())
+
+		// Each attempt gets its own fresh timeout so a slow/hanging primary
+		// does not consume the fallback's time budget.
+		// attemptCancel must be called after the response body is fully streamed,
+		// not before — canceling early drops the HTTP connection mid-body.
+		attemptCtx, attemptCancel := context.WithTimeout(r.Context(), proxy.config.CallTimeout)
+
+		resp, err := proxy.doUpstreamRequest(attemptCtx, r, body, endpoint)
+		if err != nil {
+			attemptCancel()
+
+			proxy.logger.WithFields(logrus.Fields{
+				"endpoint": endpoint.GetName(),
+				"method":   utils.SanitizeLogParam(r.Method),
+				"url":      utils.SanitizeLogParam(utils.GetRedactedURL(r.URL.String())),
+			}).Warnf("upstream request failed, trying next: %v", err)
+
+			continue
+		}
+
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			resp.Body.Close()
+			attemptCancel()
+
+			proxy.logger.WithFields(logrus.Fields{
+				"endpoint": endpoint.GetName(),
+				"method":   utils.SanitizeLogParam(r.Method),
+				"url":      utils.SanitizeLogParam(utils.GetRedactedURL(r.URL.String())),
+				"status":   resp.StatusCode,
+			}).Warnf("upstream returned non-2xx, trying next")
+
+			continue
+		}
+
+		// Detect empty body regardless of Content-Length header value.
+		// ContentLength==0 covers explicit "Content-Length: 0".
+		// ContentLength==-1 covers chunked/unknown — we must peek to detect
+		// truly empty bodies (e.g. beacon mid-restart returning chunked 200 with no data).
+		peek := make([]byte, 1)
+		n, peekErr := resp.Body.Read(peek)
+
+		if n == 0 {
+			resp.Body.Close()
+			attemptCancel()
+
+			proxy.logger.WithFields(logrus.Fields{
+				"endpoint":       endpoint.GetName(),
+				"method":         utils.SanitizeLogParam(r.Method),
+				"url":            utils.SanitizeLogParam(utils.GetRedactedURL(r.URL.String())),
+				"content_length": resp.ContentLength,
+				"peek_error":     peekErr,
+			}).Warnf("upstream returned empty body on 2xx, trying next")
+
+			continue
+		}
+
+		// Reconstruct the body stream: prepend the peeked byte.
+		resp.Body = io.NopCloser(io.MultiReader(strings.NewReader(string(peek[:n])), resp.Body))
+
+		// peekErr may be io.EOF if the entire response was exactly 1 byte — valid
+		// data. Log any unexpected non-EOF error for diagnostics but proceed since
+		// we have n==1 bytes of real data.
+		if peekErr != nil && peekErr != io.EOF {
+			proxy.logger.WithFields(logrus.Fields{
+				"endpoint": endpoint.GetName(),
+				"method":   utils.SanitizeLogParam(r.Method),
+				"url":      utils.SanitizeLogParam(utils.GetRedactedURL(r.URL.String())),
+			}).Debugf("unexpected peek error (proceeding with n=1 byte): %v", peekErr)
+		}
+
+		session.requests.Add(1)
+
+		if _, err = proxy.writeProxyResponse(rw, r, session, resp, endpoint, callCtx); err != nil {
+			proxy.logger.WithFields(logrus.Fields{
+				"endpoint": endpoint.GetName(),
+			}).Warnf("proxy stream error: %v", err)
+		}
+
+		attemptCancel()
 
 		return
-	}
-
-	session.requests.Add(1)
-
-	err = proxy.processProxyCall(w, r, session, endpoint)
-	if err != nil {
-		w.Header().Set("Content-Type", "text/html")
-		w.WriteHeader(http.StatusInternalServerError)
-
-		proxy.logger.WithFields(logrus.Fields{
-			"endpoint": endpoint.GetName(),
-			"method":   r.Method,
-			"url":      utils.GetRedactedURL(r.URL.String()),
-		}).Warnf("proxy error %v", err)
-
-		_, err = w.Write([]byte("Internal Server Error"))
-		if err != nil {
-			proxy.logger.Warnf("error writing internal server error response: %v", err)
-		}
 	}
 }
 
@@ -231,57 +354,6 @@ func (proxy *BeaconProxy) checkBlockedPaths(reqURL *url.URL) bool {
 	}
 
 	return false
-}
-
-func (proxy *BeaconProxy) getEndpointForCall(r *http.Request, session *Session, clientType pool.ClientType) (*pool.Client, error) {
-	var endpoint *pool.Client
-	if proxy.config.StickyEndpoint && proxy.pool.IsClientReady(session.lastPoolClient) {
-		endpoint = session.lastPoolClient
-	}
-
-	minCgc := uint16(0)
-	if strings.HasPrefix(r.URL.Path, "/eth/v1/beacon/blobs/") {
-		minCgc = 64 // 64 is the minimum CGC for blobs
-	}
-
-	nextEndpoint := r.Header.Get("X-Dugtrio-Next-Endpoint")
-	if nextEndpoint == "" {
-		nextEndpoint = r.URL.Query().Get("dugtrio-next-endpoint")
-	}
-
-	if nextEndpoint != "" {
-		endpoint = nil
-
-		nextEndpointType := pool.ParseClientType(nextEndpoint)
-		if nextEndpointType != pool.UnknownClient {
-			clientType = nextEndpointType
-		} else if client := proxy.pool.GetEndpointByName(nextEndpoint); client != nil {
-			if client.GetCustodyGroupCount() < minCgc {
-				return nil, fmt.Errorf("endpoint %s has too low CGC (%d < %d)", nextEndpoint, client.GetCustodyGroupCount(), minCgc)
-			}
-
-			endpoint = client
-			clientType = pool.UnspecifiedClient
-		} else {
-			return nil, fmt.Errorf("no endpoint matches X-Dugtrio-Next-Endpoint filter")
-		}
-	}
-
-	if minCgc > 0 && endpoint != nil {
-		if endpoint.GetCustodyGroupCount() < minCgc {
-			endpoint = nil
-		}
-	}
-
-	if endpoint == nil || (clientType != pool.UnspecifiedClient && endpoint.GetClientType() != clientType) {
-		endpoint = proxy.pool.GetReadyEndpoint(clientType, minCgc)
-
-		if minCgc == 0 {
-			session.setLastPoolClient(endpoint)
-		}
-	}
-
-	return endpoint, nil
 }
 
 func (proxy *BeaconProxy) rebalanceSessionsLoop() {

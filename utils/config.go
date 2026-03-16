@@ -30,15 +30,14 @@ func ReadConfig(cfg *types.Config, path string) error {
 }
 
 func readConfigFile(cfg *types.Config, path string) error {
-	f, err := os.Open(path)
+	content, err := os.ReadFile(path)
 	if err != nil {
 		return fmt.Errorf("error opening config file %v: %v", path, err)
 	}
-	defer f.Close()
 
-	decoder := yaml.NewDecoder(f)
+	content = []byte(os.ExpandEnv(string(content)))
 
-	err = decoder.Decode(cfg)
+	err = yaml.Unmarshal(content, cfg)
 	if err != nil {
 		return fmt.Errorf("error decoding explorer config: %v", err)
 	}

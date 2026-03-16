@@ -49,7 +49,6 @@ type ProxyConfig struct {
 	ProxyCount      int           `yaml:"proxyCount" envconfig:"PROXY_PROXY_COUNT"`
 	CallTimeout     time.Duration `yaml:"callTimeout" envconfig:"PROXY_CALL_TIMEOUT"`
 	SessionTimeout  time.Duration `yaml:"sessionTimeout" envconfig:"PROXY_SESSION_TIMEOUT"`
-	StickyEndpoint  bool          `yaml:"stickyEndpoint" envconfig:"PROXY_STICKY_ENDPOINT"`
 	CallRateLimit   uint64        `yaml:"callRateLimit" envconfig:"PROXY_CALL_RATE_LIMIT"`
 	CallRateBurst   int           `yaml:"callRateBurst" envconfig:"PROXY_CALL_RATE_BURST"`
 	BlockedPathsStr string        `envconfig:"PROXY_BLOCKED_PATHS"`

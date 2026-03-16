@@ -137,7 +137,7 @@ func (cache *BlockCache) GetCachedBlocks() []*CachedBlock {
 	defer cache.cacheMutex.RUnlock()
 
 	blocks := []*CachedBlock{}
-	slots := []phase0.Slot{}
+	slots := make([]phase0.Slot, 0, len(cache.slotMap))
 
 	for slot := range cache.slotMap {
 		slots = append(slots, slot)

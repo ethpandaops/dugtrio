@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	nethttp "net/http"
+	"strings"
 	"time"
 
 	eth2client "github.com/attestantio/go-eth2-client"
@@ -32,7 +33,7 @@ type BeaconClient struct {
 func NewBeaconClient(endpointCfg *types.EndpointConfig) (*BeaconClient, error) {
 	client := &BeaconClient{
 		name:     endpointCfg.Name,
-		endpoint: endpointCfg.URL,
+		endpoint: strings.TrimRight(endpointCfg.URL, "/"),
 		headers:  endpointCfg.Headers,
 	}
 

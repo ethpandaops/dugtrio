@@ -2,6 +2,7 @@ package pool
 
 import (
 	"fmt"
+	"slices"
 	"sync"
 
 	"github.com/ethpandaops/dugtrio/types"
@@ -10,7 +11,8 @@ import (
 type SchedulerMode uint8
 
 var (
-	RoundRobinScheduler SchedulerMode = 1
+	RoundRobinScheduler      SchedulerMode = 1
+	PrimaryFallbackScheduler SchedulerMode = 2
 )
 
 type BeaconPool struct {
@@ -38,6 +40,8 @@ func NewBeaconPool(config *types.PoolConfig) (*BeaconPool, error) {
 	switch config.SchedulerMode {
 	case "", "rr", "roundrobin":
 		pool.schedulerMode = RoundRobinScheduler
+	case "primary-fallback":
+		pool.schedulerMode = PrimaryFallbackScheduler
 	default:
 		return nil, fmt.Errorf("unknown pool schedulerMode: %v", config.SchedulerMode)
 	}
@@ -96,6 +100,36 @@ func (pool *BeaconPool) GetReadyEndpoint(clientType ClientType, minCgc uint16) *
 	selectedClient := pool.runClientScheduler(readyClients, clientType, minCgc)
 
 	return selectedClient
+}
+
+// GetReadyEndpointExcluding returns the first ready endpoint in declaration order
+// whose name is not in the exclude list. Used by primary-fallback routing.
+func (pool *BeaconPool) GetReadyEndpointExcluding(clientType ClientType, exclude []string) *Client {
+	canonicalFork := pool.GetCanonicalFork()
+	if canonicalFork == nil {
+		return nil
+	}
+
+	readyClients := canonicalFork.ReadyClients
+	if len(readyClients) == 0 {
+		return nil
+	}
+
+	for _, client := range pool.clients {
+		if !slices.Contains(readyClients, client) {
+			continue
+		}
+
+		if clientType != UnspecifiedClient && client.clientType != clientType {
+			continue
+		}
+
+		if !slices.Contains(exclude, client.GetName()) {
+			return client
+		}
+	}
+
+	return nil
 }
 
 func (pool *BeaconPool) IsClientReady(client *Client) bool {
