@@ -25,7 +25,7 @@ jobs:
       context: "."
       dockerfile_path: "./Dockerfile"
       run_trivy: false
-      platforms: "linux/amd64"
+      platforms: "linux/amd64,linux/arm64"
       additional_tags: "latest"
 
   # PR → dev:pr-{number}
@@ -38,7 +38,7 @@ jobs:
       context: "."
       dockerfile_path: "./Dockerfile"
       run_trivy: false
-      platforms: "linux/amd64"
+      platforms: "linux/amd64,linux/arm64"
       additional_tags: "pr-${{ github.event.pull_request.number }}"
 
   # semver tag (e.g. 0.1.0) → prod:{tag}
@@ -51,5 +51,5 @@ jobs:
       context: "."
       dockerfile_path: "./Dockerfile"
       run_trivy: false
-      platforms: "linux/amd64"
+      platforms: "linux/amd64,linux/arm64"
       additional_tags: "${{ github.ref_name }}"
