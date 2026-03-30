@@ -6,7 +6,7 @@ Dugtrio is a load balancing proxy for the ethereum beacon chain.
 It supports various features:
 
 - Close monitoring of connected endpoints to sort out forked off / unsynced clients
-- Endpoint stickiness (Reuse the same endpoint for subsequent requests when possible)
+- Multiple scheduler modes (round-robin and primary-fallback)
 - Client specific endpoints (client specific endpoints like `/lighthouse/...`, `/teku/...`, or `/caplin/...` are forwarded to the correct client type)
 - Rate limiting per IP
 - Path filtering (block certian endpoint paths)
@@ -47,6 +47,31 @@ make
 
 Dugtrio needs a configuration file with a list of client endpoints to use.
 Create a copy of [dugtrio-config.example.yaml](https://github.com/ethpandaops/dugtrio/blob/master/dugtrio-config.example.yaml) and change it for your needs.
+
+## Scheduler Modes
+
+Dugtrio supports two scheduler modes, configured via `pool.schedulerMode` in the config file.
+
+### `rr` (round-robin, default)
+
+Distributes requests across all ready endpoints in a round-robin fashion. Best for homogeneous setups where all endpoints are equivalent in data quality and latency.
+
+### `primary-fallback`
+
+Tries endpoints in **declaration order**. The first endpoint is always the primary — it handles all requests as long as it is healthy. Subsequent endpoints are only used if the primary returns a connection error, a non-2xx response, or an empty body.
+
+```yaml
+pool:
+  schedulerMode: "primary-fallback"
+
+endpoints:
+  - name: local-beacon       # primary — always tried first
+    url: "http://localhost:5052"
+  - name: remote-fallback    # only used if local-beacon fails
+    url: "http://fallback-beacon:5052"
+```
+
+**When to use it:** When your endpoints differ in data quality or cost. A common case is pairing a local full node (complete data, higher latency) with a managed RPC provider (fast but potentially incomplete responses). With round-robin, the fast-but-incomplete provider wins the race. With primary-fallback, the local node always serves requests and the provider is only used during outages.
 
 ## Header Fields for Client-Specific Routing
 
