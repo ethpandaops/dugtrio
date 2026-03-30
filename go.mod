@@ -9,11 +9,11 @@ require (
 	github.com/kelseyhightower/envconfig v1.4.0
 	github.com/mashingan/smapping v0.1.19
 	github.com/prometheus/client_golang v1.23.2
-	github.com/rs/zerolog v1.34.0
+	github.com/rs/zerolog v1.35.0
 	github.com/sirupsen/logrus v1.9.4
 	github.com/tdewolff/minify v2.3.6+incompatible
 	github.com/urfave/negroni v1.0.0
-	golang.org/x/time v0.14.0
+	golang.org/x/time v0.15.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
