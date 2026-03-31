@@ -88,6 +88,9 @@ func startDugtrio(config *types.Config) {
 	router.PathPrefix("/prysm/").Handler(beaconProxy.NewClientSpecificProxy(pool.PrysmClient))
 	router.PathPrefix("/teku/").Handler(beaconProxy.NewClientSpecificProxy(pool.TekuClient))
 
+	/* liveness endpoint - always 200 while the process is running */
+	router.HandleFunc("/livez", beaconProxy.ServeLivezHTTP).Methods("GET")
+
 	// healthcheck endpoint
 	router.HandleFunc("/healthcheck", beaconProxy.ServeHealthCheckHTTP).Methods("GET")
 
