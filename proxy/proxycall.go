@@ -206,7 +206,7 @@ func (proxy *BeaconProxy) processEventStreamResponse(callContext *proxyCallConte
 
 			written += int64(wb)
 
-			if wb == 1 {
+			if wb == 1 || (wb == 2 && evt[0] == '\r') {
 				break
 			}
 		}
