@@ -141,6 +141,10 @@ func (proxy *BeaconProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	proxy.processCall(w, r, pool.UnspecifiedClient)
 }
 
+func (proxy *BeaconProxy) ServeLivezHTTP(w http.ResponseWriter, _ *http.Request) {
+	w.WriteHeader(http.StatusOK)
+}
+
 func (proxy *BeaconProxy) ServeHealthCheckHTTP(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "text/html")
 
