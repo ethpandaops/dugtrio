@@ -39,5 +39,5 @@ func (proxy *ClientSpecificProxy) ServeHTTP(w http.ResponseWriter, r *http.Reque
 		// Otherwise keep the full path intact for client-specific endpoints
 	}
 
-	proxy.beaconProxy.processCall(w, r, proxy.clientType)
+	proxy.beaconProxy.processCall(w, r, proxy.clientType, proxy.clientType)
 }

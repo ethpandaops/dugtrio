@@ -1,9 +1,11 @@
 package handlers
 
 import (
+	"fmt"
 	"net/http"
 
 	"github.com/ethpandaops/dugtrio/frontend"
+	"github.com/ethpandaops/dugtrio/pool"
 )
 
 type SessionsPage struct {
@@ -12,13 +14,19 @@ type SessionsPage struct {
 }
 
 type SessionsPageSession struct {
-	Index     int     `json:"index"`
-	Key       string  `json:"key"`
-	FirstSeen string  `json:"first_seen"`
-	LastSeen  string  `json:"last_seen"`
-	Requests  uint64  `json:"requests"`
-	Tokens    float64 `json:"tokens"`
-	Target    string  `json:"target"`
+	Index     int                          `json:"index"`
+	Key       string                       `json:"key"`
+	FirstSeen string                       `json:"first_seen"`
+	LastSeen  string                       `json:"last_seen"`
+	Requests  uint64                       `json:"requests"`
+	Tokens    float64                      `json:"tokens"`
+	Target    string                       `json:"target"`
+	Targets   []*SessionsPageSessionTarget `json:"targets"`
+}
+
+type SessionsPageSessionTarget struct {
+	Prefix string `json:"prefix"`
+	Target string `json:"target"`
 }
 
 // Sessions will return the "sessions" page using a go template
@@ -48,20 +56,39 @@ func (fh *FrontendHandler) getSessionsPageData() (*SessionsPage, error) {
 		Sessions: []*SessionsPageSession{},
 	}
 
-	// get sessions
-	for index, session := range fh.proxy.GetSessions() {
+	for index, group := range fh.proxy.GetSessionGroups() {
 		sessionData := &SessionsPageSession{
 			Index:     index + 1,
-			Key:       session.GetIPAddr(),
-			FirstSeen: session.GetFirstSeen().Format("2006-01-02 15:04:05"),
-			LastSeen:  session.GetLastSeen().Format("2006-01-02 15:04:05"),
-			Requests:  session.GetRequests(),
-			Tokens:    session.GetLimiterTokens(),
+			Key:       group.GetIPAddr(),
+			FirstSeen: group.GetFirstSeen().Format("2006-01-02 15:04:05"),
+			LastSeen:  group.GetLastSeen().Format("2006-01-02 15:04:05"),
+			Requests:  group.GetRequests(),
+			Tokens:    group.GetLimiterTokens(),
 			Target:    "",
+			Targets:   []*SessionsPageSessionTarget{},
 		}
 
-		if lastClient := session.GetLastPoolClient(); lastClient != nil {
-			sessionData.Target = lastClient.GetName()
+		for _, session := range group.GetSessions() {
+			prefix := "main"
+			if session.GetPrefix() != pool.UnspecifiedClient {
+				prefix = session.GetPrefix().String()
+			}
+
+			target := ""
+			if lastClient := session.GetLastPoolClient(); lastClient != nil {
+				target = lastClient.GetName()
+			}
+
+			if sessionData.Target != "" {
+				sessionData.Target += ", "
+			}
+
+			sessionData.Target += fmt.Sprintf("%s: %s", prefix, target)
+
+			sessionData.Targets = append(sessionData.Targets, &SessionsPageSessionTarget{
+				Prefix: prefix,
+				Target: target,
+			})
 		}
 
 		pageData.Sessions = append(pageData.Sessions, sessionData)
