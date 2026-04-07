@@ -52,9 +52,14 @@ proxy:
     - ^/eth/v[0-9]+/debug/.*
 
   # optional authorization
-  authorization:
-    require: false
+  auth:
+    required: false
+    # password for HTTP Basic Auth (username is used as session identifier)
     password: ""
+    # API keys for header-based auth (use X-Dugtrio-Secret-Token header)
+    apiKeys:
+      - name: "example-client"
+        key: "your-secret-api-key-here"
 
   # how often to check for session imbalances (0 = disabled)
   rebalanceInterval: 10s

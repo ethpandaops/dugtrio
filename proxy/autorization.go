@@ -9,7 +9,19 @@ import (
 func (proxy *BeaconProxy) CheckAuthorization(r *http.Request) (string, bool) {
 	requireAuth := proxy.config.Auth != nil && proxy.config.Auth.Required
 
-	// Get the authorization header
+	// Check for API key in X-Dugtrio-Secret-Token header first
+	apiKey := r.Header.Get("X-Dugtrio-Secret-Token")
+	if apiKey != "" && proxy.config.Auth != nil {
+		for _, key := range proxy.config.Auth.ApiKeys {
+			if key.Key == apiKey {
+				return key.Name, true
+			}
+		}
+		// API key provided but invalid
+		return "", !requireAuth
+	}
+
+	// Fall back to Basic Auth
 	authHeader := r.Header.Get("Authorization")
 	if authHeader == "" {
 		return "", !requireAuth

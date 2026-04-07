@@ -75,8 +75,14 @@ type FrontendConfig struct {
 }
 
 type AuthConfig struct {
-	Required bool   `yaml:"required" envconfig:"PROXY_AUTH_REQUIRED"`
-	Password string `yaml:"password" envconfig:"PROXY_AUTH_PASSWORD"`
+	Required bool     `yaml:"required" envconfig:"PROXY_AUTH_REQUIRED"`
+	Password string   `yaml:"password" envconfig:"PROXY_AUTH_PASSWORD"`
+	ApiKeys  []ApiKey `yaml:"apiKeys"`
+}
+
+type ApiKey struct {
+	Name string `yaml:"name"`
+	Key  string `yaml:"key"`
 }
 
 type MetricsConfig struct {
