@@ -189,7 +189,7 @@ func (proxy *BeaconProxy) processProxyCall(w http.ResponseWriter, r *http.Reques
 }
 
 func (proxy *BeaconProxy) processEventStreamResponse(callContext *proxyCallContext, w http.ResponseWriter, r io.ReadCloser, session *Session) (int64, error) {
-	rd := bufio.NewReader(r)
+	rd := bufio.NewReaderSize(r, 64*1024)
 	written := int64(0)
 
 	for {
@@ -206,7 +206,7 @@ func (proxy *BeaconProxy) processEventStreamResponse(callContext *proxyCallConte
 
 			written += int64(wb)
 
-			if wb == 1 {
+			if wb == 1 || (wb == 2 && evt[0] == '\r') {
 				break
 			}
 		}
