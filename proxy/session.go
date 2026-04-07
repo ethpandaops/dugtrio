@@ -140,9 +140,11 @@ func (proxy *BeaconProxy) GetAllSessions() []*Session {
 	sessions := make([]*Session, 0, len(proxy.sessions)*2)
 	for _, group := range proxy.sessions {
 		group.sessionMutex.Lock()
+
 		for _, session := range group.sessions {
 			sessions = append(sessions, session)
 		}
+
 		group.sessionMutex.Unlock()
 	}
 

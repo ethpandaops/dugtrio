@@ -309,9 +309,11 @@ func (proxy *BeaconProxy) rebalanceSessions() {
 
 	for _, group := range proxy.sessions {
 		group.sessionMutex.Lock()
+
 		for _, session := range group.sessions {
 			allSessions = append(allSessions, session)
 		}
+
 		group.sessionMutex.Unlock()
 	}
 
