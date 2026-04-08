@@ -38,6 +38,7 @@ type SessionGroup struct {
 type Session struct {
 	group          *SessionGroup
 	prefix         pool.ClientType
+	lastSeen       time.Time
 	lastPoolClient *pool.Client
 	lastRebalance  time.Time
 	activeContexts struct {
@@ -100,16 +101,21 @@ func (proxy *BeaconProxy) getSessionForRequest(r *http.Request, ident string, pr
 	group.sessionMutex.Lock()
 	defer group.sessionMutex.Unlock()
 
+	now := time.Now()
+
 	session := group.sessions[prefix]
 	if session == nil {
 		session = &Session{
 			group:         group,
 			prefix:        prefix,
-			lastRebalance: time.Now(),
+			lastSeen:      now,
+			lastRebalance: now,
 		}
 		session.init()
 
 		group.sessions[prefix] = session
+	} else {
+		session.lastSeen = now
 	}
 
 	return session
@@ -165,8 +171,22 @@ func (proxy *BeaconProxy) cleanupSessions() {
 
 		for ip, group := range proxy.sessions {
 			if time.Since(group.lastSeen) > proxy.config.SessionTimeout {
+				// Entire group expired, remove it.
 				delete(proxy.sessions, ip)
+
+				continue
 			}
+
+			// Expire individual prefix sessions within the group.
+			group.sessionMutex.Lock()
+
+			for prefix, session := range group.sessions {
+				if time.Since(session.lastSeen) > proxy.config.SessionTimeout {
+					delete(group.sessions, prefix)
+				}
+			}
+
+			group.sessionMutex.Unlock()
 		}
 
 		proxy.sessionMutex.Unlock()

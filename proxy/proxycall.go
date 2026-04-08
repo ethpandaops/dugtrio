@@ -219,7 +219,9 @@ func (proxy *BeaconProxy) processEventStreamResponse(callContext *proxyCallConte
 			return written, nil
 		}
 
-		session.group.lastSeen = time.Now()
+		now := time.Now()
+		session.group.lastSeen = now
+		session.lastSeen = now
 
 		callContext.updateChan <- proxy.config.CallTimeout
 	}
