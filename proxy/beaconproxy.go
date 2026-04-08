@@ -61,7 +61,7 @@ type BeaconProxy struct {
 	blockedPaths []*regexp.Regexp
 
 	sessionMutex sync.Mutex
-	sessions     map[string]*Session
+	sessions     map[string]*SessionGroup
 }
 
 func NewBeaconProxy(config *types.ProxyConfig, beaconPool *pool.BeaconPool, proxyMetrics *metrics.ProxyMetrics) (*BeaconProxy, error) {
@@ -71,7 +71,7 @@ func NewBeaconProxy(config *types.ProxyConfig, beaconPool *pool.BeaconPool, prox
 		proxyMetrics: proxyMetrics,
 		logger:       logrus.WithField("module", "proxy"),
 		blockedPaths: []*regexp.Regexp{},
-		sessions:     map[string]*Session{},
+		sessions:     make(map[string]*SessionGroup),
 	}
 
 	blockedPaths := []string{}
@@ -114,7 +114,7 @@ func NewBeaconProxy(config *types.ProxyConfig, beaconPool *pool.BeaconPool, prox
 }
 
 func (proxy *BeaconProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	proxy.processCall(w, r, pool.UnspecifiedClient)
+	proxy.processCall(w, r, pool.UnspecifiedClient, pool.UnspecifiedClient)
 }
 
 func (proxy *BeaconProxy) ServeHealthCheckHTTP(w http.ResponseWriter, _ *http.Request) {
@@ -138,7 +138,7 @@ func (proxy *BeaconProxy) ServeHealthCheckHTTP(w http.ResponseWriter, _ *http.Re
 	}
 }
 
-func (proxy *BeaconProxy) processCall(w http.ResponseWriter, r *http.Request, clientType pool.ClientType) {
+func (proxy *BeaconProxy) processCall(w http.ResponseWriter, r *http.Request, clientType, sessionPrefix pool.ClientType) {
 	if proxy.checkBlockedPaths(r.URL) {
 		w.Header().Set("Content-Type", "text/html")
 		w.WriteHeader(http.StatusForbidden)
@@ -164,8 +164,8 @@ func (proxy *BeaconProxy) processCall(w http.ResponseWriter, r *http.Request, cl
 		return
 	}
 
-	session := proxy.getSessionForRequest(r, identifier)
-	if session.checkCallLimit(1) != nil {
+	session := proxy.getSessionForRequest(r, identifier, sessionPrefix)
+	if session.group.checkCallLimit(1) != nil {
 		w.Header().Set("Content-Type", "text/html")
 		w.WriteHeader(http.StatusTooManyRequests)
 
@@ -202,7 +202,7 @@ func (proxy *BeaconProxy) processCall(w http.ResponseWriter, r *http.Request, cl
 		return
 	}
 
-	session.requests.Add(1)
+	session.group.requests.Add(1)
 
 	err = proxy.processProxyCall(w, r, session, endpoint)
 	if err != nil {
@@ -301,37 +301,52 @@ func (proxy *BeaconProxy) rebalanceSessions() {
 
 	readyClients := canonicalFork.ReadyClients
 
-	// Count sessions per endpoint
-	endpointCounts := make(map[*pool.Client]int)
-	for _, client := range readyClients {
-		endpointCounts[client] = 0
-	}
-
 	proxy.sessionMutex.Lock()
 	defer proxy.sessionMutex.Unlock()
 
+	// Collect all sessions across all groups.
+	allSessions := make([]*Session, 0, len(proxy.sessions)*2)
+
+	for _, group := range proxy.sessions {
+		group.sessionMutex.Lock()
+
+		for _, session := range group.sessions {
+			allSessions = append(allSessions, session)
+		}
+
+		group.sessionMutex.Unlock()
+	}
+
+	// Count total sessions per endpoint across all prefixes.
+	// This gives us the real load each endpoint is handling.
+	endpointTotals := make(map[*pool.Client]int, len(readyClients))
+	for _, client := range readyClients {
+		endpointTotals[client] = 0
+	}
+
 	totalSessions := 0
 
-	for _, session := range proxy.sessions {
+	for _, session := range allSessions {
 		if session.lastPoolClient != nil && slices.Contains(readyClients, session.lastPoolClient) {
-			endpointCounts[session.lastPoolClient]++
+			endpointTotals[session.lastPoolClient]++
 			totalSessions++
 		}
 	}
 
-	// Calculate ideal distribution
-	idealCount := float64(totalSessions) / float64(len(readyClients))
+	if totalSessions == 0 {
+		return
+	}
 
-	// Check if any endpoint exceeds threshold
+	idealTotal := float64(totalSessions) / float64(len(readyClients))
+
 	diff := 0.0
 	absDiff := 0
 
 	needsRebalance := func() bool {
-		for _, count := range endpointCounts {
-			diff = math.Abs(float64(count)-idealCount) / idealCount
-			absDiff = int(math.Abs(float64(count) - idealCount))
+		for _, count := range endpointTotals {
+			diff = math.Abs(float64(count)-idealTotal) / idealTotal
+			absDiff = int(math.Abs(float64(count) - idealTotal))
 
-			// Use the minimum of percentage and absolute thresholds
 			if diff > proxy.config.RebalanceThreshold && absDiff > proxy.config.RebalanceAbsThreshold {
 				return true
 			}
@@ -340,89 +355,139 @@ func (proxy *BeaconProxy) rebalanceSessions() {
 		return false
 	}
 
-	// Rebalance if needed
-	if needsRebalance() {
-		proxy.logger.Infof("Rebalancing sessions (threshold exceeded: ideal=%.2f, diff=%.2f%%, abs_diff=%v)", idealCount, diff*100, absDiff)
-
-		rebalancedCount := 0
-		rebalanceOne := func() bool {
-			// Sort endpoints by session count
-			type endpointCount struct {
-				client *pool.Client
-				count  int
-			}
-
-			counts := make([]endpointCount, 0, len(endpointCounts))
-
-			for client, count := range endpointCounts {
-				counts = append(counts, endpointCount{client, count})
-			}
-
-			if len(counts) <= 1 {
-				return false
-			}
-
-			sort.Slice(counts, func(i, j int) bool {
-				return counts[i].count > counts[j].count
-			})
-
-			var targetClient *pool.Client
-
-			var targetCountsIndex int
-
-			for i := len(counts) - 1; i > 0; i-- {
-				if slices.Contains(readyClients, counts[i].client) {
-					targetClient = counts[i].client
-					targetCountsIndex = i
-
-					break
-				}
-			}
-
-			if targetClient == nil || targetClient == counts[0].client {
-				return false
-			}
-
-			sessions := make([]*Session, 0, counts[0].count)
-			for _, session := range proxy.sessions {
-				if session.lastPoolClient == counts[0].client {
-					sessions = append(sessions, session)
-				}
-			}
-
-			sort.Slice(sessions, func(i, j int) bool {
-				return sessions[i].lastRebalance.Before(sessions[j].lastRebalance)
-			})
-
-			if len(sessions) == 0 {
-				return false
-			}
-
-			session := sessions[0]
-
-			session.setLastPoolClient(targetClient)
-
-			endpointCounts[counts[0].client]--
-			counts[0].count--
-			endpointCounts[targetClient]++
-			counts[targetCountsIndex].count++
-			rebalancedCount++
-
-			proxy.logger.Infof("Rebalanced session %v: %v -> %v", session.GetIPAddr(), counts[0].client.GetName(), targetClient.GetName())
-
-			return true
-		}
-
-		for rebalanceOne() {
-			if !needsRebalance() {
-				break
-			}
-
-			if proxy.config.RebalanceMaxSweep > 0 && rebalancedCount >= proxy.config.RebalanceMaxSweep {
-				break
-			}
-		}
-
-		proxy.logger.Infof("Rebalanced %d sessions (threshold exceeded: ideal=%.2f, diff=%.2f%%, abs_diff=%v)", rebalancedCount, idealCount, diff*100, absDiff)
+	if !needsRebalance() {
+		return
 	}
+
+	proxy.logger.Infof("Rebalancing sessions (ideal=%.2f, diff=%.2f%%, abs_diff=%v)", idealTotal, diff*100, absDiff)
+
+	rebalancedCount := 0
+
+	// Each iteration moves one session from the heaviest overloaded endpoint.
+	// Unconstrained sessions are preferred because they can target any endpoint.
+	// Constrained sessions can only move to endpoints of the same client type.
+	rebalanceOne := func() bool {
+		// Sort endpoints by total load, descending.
+		type epLoad struct {
+			client *pool.Client
+			total  int
+		}
+
+		loads := make([]epLoad, 0, len(endpointTotals))
+		for client, total := range endpointTotals {
+			loads = append(loads, epLoad{client, total})
+		}
+
+		sort.Slice(loads, func(i, j int) bool {
+			return loads[i].total > loads[j].total
+		})
+
+		// Try each overloaded endpoint, starting from the heaviest.
+		for srcIdx := range loads {
+			srcClient := loads[srcIdx].client
+			srcTotal := loads[srcIdx].total
+
+			if float64(srcTotal) <= idealTotal {
+				break
+			}
+
+			// Partition movable sessions on this endpoint by constraint type.
+			var unconstrained []*Session
+
+			constrained := make(map[pool.ClientType][]*Session, 2)
+
+			for _, session := range allSessions {
+				if session.lastPoolClient != srcClient {
+					continue
+				}
+
+				if session.prefix == pool.UnspecifiedClient {
+					unconstrained = append(unconstrained, session)
+				} else {
+					constrained[session.prefix] = append(constrained[session.prefix], session)
+				}
+			}
+
+			// Try unconstrained first — can target any underloaded endpoint.
+			if len(unconstrained) > 0 {
+				// Find most underloaded endpoint (last in sorted list).
+				var target *pool.Client
+
+				for tIdx := len(loads) - 1; tIdx > srcIdx; tIdx-- {
+					if loads[tIdx].total < srcTotal {
+						target = loads[tIdx].client
+
+						break
+					}
+				}
+
+				if target != nil {
+					sort.Slice(unconstrained, func(i, j int) bool {
+						return unconstrained[i].lastRebalance.Before(unconstrained[j].lastRebalance)
+					})
+
+					session := unconstrained[0]
+					session.setLastPoolClient(target)
+
+					endpointTotals[srcClient]--
+					endpointTotals[target]++
+					rebalancedCount++
+
+					proxy.logger.Infof("Rebalanced session %v [main]: %v -> %v",
+						session.group.GetIPAddr(),
+						srcClient.GetName(), target.GetName())
+
+					return true
+				}
+			}
+
+			// Try constrained — can only target underloaded endpoints of same type.
+			for clientType, candidates := range constrained {
+				var target *pool.Client
+
+				for tIdx := len(loads) - 1; tIdx > srcIdx; tIdx-- {
+					if loads[tIdx].client.GetClientType() == clientType && loads[tIdx].total < srcTotal {
+						target = loads[tIdx].client
+
+						break
+					}
+				}
+
+				if target == nil {
+					continue
+				}
+
+				sort.Slice(candidates, func(i, j int) bool {
+					return candidates[i].lastRebalance.Before(candidates[j].lastRebalance)
+				})
+
+				session := candidates[0]
+				session.setLastPoolClient(target)
+
+				endpointTotals[srcClient]--
+				endpointTotals[target]++
+				rebalancedCount++
+
+				proxy.logger.Infof("Rebalanced session %v [%v]: %v -> %v",
+					session.group.GetIPAddr(), session.prefix,
+					srcClient.GetName(), target.GetName())
+
+				return true
+			}
+		}
+
+		return false
+	}
+
+	for rebalanceOne() {
+		if !needsRebalance() {
+			break
+		}
+
+		if proxy.config.RebalanceMaxSweep > 0 && rebalancedCount >= proxy.config.RebalanceMaxSweep {
+			break
+		}
+	}
+
+	proxy.logger.Infof("Rebalanced %d sessions", rebalancedCount)
 }

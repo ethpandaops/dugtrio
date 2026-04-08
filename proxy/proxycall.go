@@ -146,8 +146,8 @@ func (proxy *BeaconProxy) processProxyCall(w http.ResponseWriter, r *http.Reques
 	}
 
 	respH.Set("X-Dugtrio-Version", fmt.Sprintf("dugtrio/%v", utils.GetVersion()))
-	respH.Set("X-Dugtrio-Session-Ip", session.GetIPAddr())
-	respH.Set("X-Dugtrio-Session-Tokens", fmt.Sprintf("%.2f", session.getCallLimitTokens()))
+	respH.Set("X-Dugtrio-Session-Ip", session.group.GetIPAddr())
+	respH.Set("X-Dugtrio-Session-Tokens", fmt.Sprintf("%.2f", session.group.getCallLimitTokens()))
 	respH.Set("X-Dugtrio-Endpoint-Name", endpoint.GetName())
 	respH.Set("X-Dugtrio-Endpoint-Type", endpoint.GetClientType().String())
 	respH.Set("X-Dugtrio-Endpoint-Version", endpoint.GetVersion())
@@ -183,7 +183,7 @@ func (proxy *BeaconProxy) processProxyCall(w http.ResponseWriter, r *http.Reques
 		respLen = rspLen
 	}
 
-	proxy.logger.Debugf("proxied %v %v call (ip: %v, status: %v, length: %v, endpoint: %v)", r.Method, r.URL.EscapedPath(), session.GetIPAddr(), resp.StatusCode, respLen, endpoint.GetName())
+	proxy.logger.Debugf("proxied %v %v call (ip: %v, status: %v, length: %v, endpoint: %v)", r.Method, r.URL.EscapedPath(), session.group.GetIPAddr(), resp.StatusCode, respLen, endpoint.GetName())
 
 	return nil
 }
@@ -219,7 +219,9 @@ func (proxy *BeaconProxy) processEventStreamResponse(callContext *proxyCallConte
 			return written, nil
 		}
 
-		session.updateLastSeen()
+		now := time.Now()
+		session.group.lastSeen = now
+		session.lastSeen = now
 
 		callContext.updateChan <- proxy.config.CallTimeout
 	}

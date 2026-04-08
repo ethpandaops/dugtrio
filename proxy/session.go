@@ -16,14 +16,31 @@ import (
 	"golang.org/x/time/rate"
 )
 
+// SessionGroup holds shared state for all sessions from the same IP/ident.
+// The rate limiter and request counter are shared across all prefix-specific
+// sessions within the group, so rate limits apply per-client regardless of
+// which prefix endpoints they use.
+type SessionGroup struct {
+	ipAddr    string
+	limiter   *rate.Limiter
+	firstSeen time.Time
+	lastSeen  time.Time
+	requests  atomic.Uint64
+
+	sessionMutex sync.Mutex
+	sessions     map[pool.ClientType]*Session
+}
+
+// Session holds per-prefix state for sticky endpoint selection and active
+// connections. Each client-specific prefix (e.g. /lighthouse/, /prysm/) and
+// the main endpoint get their own Session so their sticky endpoint choices
+// don't interfere with each other.
 type Session struct {
-	ipAddr         string
-	limiter        *rate.Limiter
-	firstSeen      time.Time
+	group          *SessionGroup
+	prefix         pool.ClientType
 	lastSeen       time.Time
 	lastPoolClient *pool.Client
 	lastRebalance  time.Time
-	requests       atomic.Uint64
 	activeContexts struct {
 		sync.Mutex
 		contexts map[uint64]context.CancelFunc
@@ -35,7 +52,7 @@ func (session *Session) init() {
 	session.activeContexts.contexts = make(map[uint64]context.CancelFunc)
 }
 
-func (proxy *BeaconProxy) getSessionForRequest(r *http.Request, ident string) *Session {
+func (proxy *BeaconProxy) getSessionForRequest(r *http.Request, ident string, prefix pool.ClientType) *Session {
 	var ip string
 
 	if proxy.config.ProxyCount > 0 {
@@ -63,39 +80,82 @@ func (proxy *BeaconProxy) getSessionForRequest(r *http.Request, ident string) *S
 		ip = fmt.Sprintf("%s-%s", ip, ident)
 	}
 
-	session := proxy.sessions[ip]
+	group := proxy.sessions[ip]
+	if group == nil {
+		group = &SessionGroup{
+			ipAddr:    ip,
+			firstSeen: time.Now(),
+			lastSeen:  time.Now(),
+			sessions:  make(map[pool.ClientType]*Session, 4),
+		}
+
+		if proxy.config.CallRateLimit > 0 {
+			group.limiter = rate.NewLimiter(rate.Limit(proxy.config.CallRateLimit), proxy.config.CallRateBurst)
+		}
+
+		proxy.sessions[ip] = group
+	} else {
+		group.lastSeen = time.Now()
+	}
+
+	group.sessionMutex.Lock()
+	defer group.sessionMutex.Unlock()
+
+	now := time.Now()
+
+	session := group.sessions[prefix]
 	if session == nil {
 		session = &Session{
-			ipAddr:        ip,
-			firstSeen:     time.Now(),
-			lastSeen:      time.Now(),
-			lastRebalance: time.Now(),
+			group:         group,
+			prefix:        prefix,
+			lastSeen:      now,
+			lastRebalance: now,
 		}
 		session.init()
 
-		if proxy.config.CallRateLimit > 0 {
-			session.limiter = rate.NewLimiter(rate.Limit(proxy.config.CallRateLimit), proxy.config.CallRateBurst)
-		}
-
-		proxy.sessions[ip] = session
+		group.sessions[prefix] = session
 	} else {
-		session.lastSeen = time.Now()
+		session.lastSeen = now
 	}
 
 	return session
 }
 
-func (proxy *BeaconProxy) GetSessions() []*Session {
+// GetSessionGroups returns all session groups sorted by firstSeen.
+func (proxy *BeaconProxy) GetSessionGroups() []*SessionGroup {
 	proxy.sessionMutex.Lock()
 	defer proxy.sessionMutex.Unlock()
 
-	sessions := []*Session{}
-	for _, session := range proxy.sessions {
-		sessions = append(sessions, session)
+	groups := make([]*SessionGroup, 0, len(proxy.sessions))
+	for _, group := range proxy.sessions {
+		groups = append(groups, group)
+	}
+
+	sort.Slice(groups, func(a, b int) bool {
+		return groups[b].firstSeen.After(groups[a].firstSeen)
+	})
+
+	return groups
+}
+
+// GetAllSessions returns all prefix-specific sessions across all groups.
+func (proxy *BeaconProxy) GetAllSessions() []*Session {
+	proxy.sessionMutex.Lock()
+	defer proxy.sessionMutex.Unlock()
+
+	sessions := make([]*Session, 0, len(proxy.sessions)*2)
+	for _, group := range proxy.sessions {
+		group.sessionMutex.Lock()
+
+		for _, session := range group.sessions {
+			sessions = append(sessions, session)
+		}
+
+		group.sessionMutex.Unlock()
 	}
 
 	sort.Slice(sessions, func(a, b int) bool {
-		return sessions[b].firstSeen.After(sessions[a].firstSeen)
+		return sessions[b].group.firstSeen.After(sessions[a].group.firstSeen)
 	})
 
 	return sessions
@@ -109,66 +169,101 @@ func (proxy *BeaconProxy) cleanupSessions() {
 
 		proxy.sessionMutex.Lock()
 
-		for ip, session := range proxy.sessions {
-			if time.Since(session.lastSeen) > proxy.config.SessionTimeout {
+		for ip, group := range proxy.sessions {
+			if time.Since(group.lastSeen) > proxy.config.SessionTimeout {
+				// Entire group expired, remove it.
 				delete(proxy.sessions, ip)
+
+				continue
 			}
+
+			// Expire individual prefix sessions within the group.
+			group.sessionMutex.Lock()
+
+			for prefix, session := range group.sessions {
+				if time.Since(session.lastSeen) > proxy.config.SessionTimeout {
+					delete(group.sessions, prefix)
+				}
+			}
+
+			group.sessionMutex.Unlock()
 		}
 
 		proxy.sessionMutex.Unlock()
 	}
 }
 
-func (session *Session) checkCallLimit(callCost int) error {
-	if session.limiter == nil {
+// SessionGroup methods
+
+func (group *SessionGroup) checkCallLimit(callCost int) error {
+	if group.limiter == nil {
 		return nil
 	}
 
-	if !session.limiter.AllowN(time.Now(), callCost) {
+	if !group.limiter.AllowN(time.Now(), callCost) {
 		return fmt.Errorf("call rate limit exceeded")
 	}
 
 	return nil
 }
 
-func (session *Session) getCallLimitTokens() float64 {
-	if session.limiter == nil {
+func (group *SessionGroup) getCallLimitTokens() float64 {
+	if group.limiter == nil {
 		return 0
 	}
 
-	return session.limiter.Tokens()
+	return group.limiter.Tokens()
 }
 
-func (session *Session) GetIPAddr() string {
-	return session.ipAddr
+func (group *SessionGroup) GetIPAddr() string {
+	return group.ipAddr
 }
 
-func (session *Session) GetFirstSeen() time.Time {
-	return session.firstSeen
+func (group *SessionGroup) GetFirstSeen() time.Time {
+	return group.firstSeen
 }
 
-func (session *Session) GetLastSeen() time.Time {
-	return session.lastSeen
+func (group *SessionGroup) GetLastSeen() time.Time {
+	return group.lastSeen
+}
+
+func (group *SessionGroup) GetRequests() uint64 {
+	return group.requests.Load()
+}
+
+func (group *SessionGroup) GetLimiterTokens() float64 {
+	if group.limiter == nil {
+		return 0
+	}
+
+	return group.limiter.Tokens()
+}
+
+// GetSessions returns all prefix sessions within this group.
+func (group *SessionGroup) GetSessions() []*Session {
+	group.sessionMutex.Lock()
+	defer group.sessionMutex.Unlock()
+
+	sessions := make([]*Session, 0, len(group.sessions))
+	for _, session := range group.sessions {
+		sessions = append(sessions, session)
+	}
+
+	return sessions
+}
+
+// Session methods
+
+func (session *Session) GetGroup() *SessionGroup {
+	return session.group
+}
+
+func (session *Session) GetPrefix() pool.ClientType {
+	return session.prefix
 }
 
 func (session *Session) GetLastPoolClient() *pool.Client {
 	return session.lastPoolClient
-}
-
-func (session *Session) GetRequests() uint64 {
-	return session.requests.Load()
-}
-
-func (session *Session) GetLimiterTokens() float64 {
-	if session.limiter == nil {
-		return 0
-	}
-
-	return session.limiter.Tokens()
-}
-
-func (session *Session) updateLastSeen() {
-	session.lastSeen = time.Now()
 }
 
 func (session *Session) addActiveContext(cancel context.CancelFunc) uint64 {
