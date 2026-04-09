@@ -9,7 +9,8 @@ Add per-customer static token authentication to dugtrio. Each customer gets a un
 - Unique URL per customer: `https://dugtrio.example.com/<token>/eth/v1/...`
 - Static tokens configured in `config.yaml` (no restart-free mutations for now)
 - All customers share the same upstream pool and global settings (rate limits, blocked paths)
-- Prometheus metrics broken down by customer name × normalized beacon API path × HTTP method × status
+- Prometheus metrics broken down by billing code × normalized beacon API path × HTTP method × status
+- Raw tokens never appear in logs — only `billing_code` is used as the log/metrics identifier
 
 ## Non-Goals
 
@@ -28,17 +29,25 @@ New `clients` list under `proxy`:
 proxy:
   clients:
     - token: "abc123def456"
-      name: "customer-a"
+      name: "Acme Corp"
+      billing_code: "ACM-ETH-01"
     - token: "xyz789ghi012"
-      name: "customer-b"
+      name: "Globex"
+      billing_code: "GLB-ETH-01"
 ```
+
+Fields:
+- `token` — secret embedded in the URL path; never logged
+- `name` — human-readable display label (used in frontend UI)
+- `billing_code` — structured ops identifier (format `AAA-BBB-NN`); used in all log fields and metric labels
 
 New Go types added to `types/config.go`:
 
 ```go
 type ClientConfig struct {
-    Token string `yaml:"token"`
-    Name  string `yaml:"name"`
+    Token       string `yaml:"token"`
+    Name        string `yaml:"name"`
+    BillingCode string `yaml:"billing_code"`
 }
 ```
 
@@ -48,7 +57,7 @@ type ClientConfig struct {
 Clients []*ClientConfig `yaml:"clients"`
 ```
 
-At startup, `TokenRouter` builds `map[string]*types.ClientConfig` (token → config) for O(1) lookup. Raw token strings never appear in logs or metric labels — only `Name` is used.
+At startup, `TokenRouter` builds `map[string]*types.ClientConfig` (token → config) for O(1) lookup. Raw token strings never appear in logs or metric labels — `BillingCode` is used everywhere a machine-readable identifier is needed; `Name` is display-only.
 
 ---
 
@@ -72,7 +81,7 @@ TokenRouter.ServeHTTP
   1. Extract first path segment as token candidate
   2. Lookup token in map → 401 Unauthorized if not found
   3. Strip token prefix → r.URL.Path = /eth/v1/beacon/blocks/head
-  4. Store client name on request context (unexported key)
+  4. Store billing_code on request context (unexported key) — never the raw token
   5. Delegate to beaconProxy.processCall(w, r, UnspecifiedClient)
 ```
 
@@ -118,7 +127,7 @@ ClientRequests *prometheus.CounterVec
 ```
 
 Labels:
-- `client_name` — token's `Name` field
+- `billing_code` — token's `BillingCode` field (e.g. `ACM-ETH-01`); empty string for Basic Auth sessions
 - `path` — normalized beacon API path (see below)
 - `method` — `GET` or `POST`
 - `status` — `success`, `upstream_error`, `blocked`, `no_upstream`
@@ -141,7 +150,7 @@ Unknown paths are passed through as-is. Since only registered clients can reach 
 
 ### Increment point
 
-The counter is incremented in a deferred call inside `BeaconProxy.processCall`, after the response is committed. The client name is read from the request context. If no client name is present (Basic Auth path), the label is set to `""` so existing sessions are unaffected.
+The counter is incremented in a deferred call inside `BeaconProxy.processCall`, after the response is committed. The `billing_code` is read from the request context. If absent (Basic Auth path), the label is set to `""` so existing sessions are unaffected.
 
 ### Exposure
 
@@ -165,5 +174,5 @@ Existing `/metrics` Prometheus endpoint — no new endpoint required.
 ## Challenges & Notes
 
 - **Path normalization completeness** — the Beacon API has ~80+ paths; the normalizer only needs to cover paths that are actually called, so it can grow incrementally. Unrecognized paths are safe (just high-cardinality if called with many unique IDs).
-- **Token security** — tokens in URL paths appear in access logs by default. Operators should configure log redaction or use a reverse proxy (nginx/Caddy) that strips the token before logging if required.
+- **Token masking** — `TokenRouter` strips the token from `r.URL.Path` before any log statement or upstream request. All log fields and metric labels use `billing_code` exclusively. The raw token only exists in memory at the moment of lookup and is never forwarded or recorded. Operators should still configure their reverse proxy (nginx/Caddy) to redact the first URL path segment if access logs are retained.
 - **Basic Auth coexistence** — both auth mechanisms are independent code paths. Operators can run both during migration or use one exclusively.
