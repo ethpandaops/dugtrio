@@ -169,7 +169,22 @@ func (proxy *BeaconProxy) ServeHealthCheckHTTP(w http.ResponseWriter, _ *http.Re
 func (proxy *BeaconProxy) processCall(w http.ResponseWriter, r *http.Request, clientType pool.ClientType) {
 	rw := &responseWriterTracker{ResponseWriter: w}
 
+	billingCode := getBillingCode(r.Context())
+	callStatus := "no_upstream"
+
+	if billingCode != "" && proxy.proxyMetrics != nil {
+		defer func() {
+			proxy.proxyMetrics.AddBillingCall(
+				billingCode,
+				NormalizePath(r.URL.EscapedPath()),
+				r.Method,
+				callStatus,
+			)
+		}()
+	}
+
 	if proxy.checkBlockedPaths(r.URL) {
+		callStatus = "blocked"
 		rw.Header().Set("Content-Type", "text/plain")
 		rw.WriteHeader(http.StatusForbidden)
 
@@ -254,6 +269,10 @@ func (proxy *BeaconProxy) processCall(w http.ResponseWriter, r *http.Request, cl
 	for {
 		endpoint := proxy.pool.GetReadyEndpointExcluding(clientType, tried)
 		if endpoint == nil {
+			if len(tried) > 0 {
+				callStatus = "upstream_error"
+			}
+
 			rw.Header().Set("Content-Type", "text/plain")
 			rw.WriteHeader(http.StatusServiceUnavailable)
 
@@ -336,6 +355,7 @@ func (proxy *BeaconProxy) processCall(w http.ResponseWriter, r *http.Request, cl
 		}
 
 		session.requests.Add(1)
+		callStatus = "success"
 
 		if _, err = proxy.writeProxyResponse(rw, r, session, resp, endpoint, callCtx); err != nil {
 			proxy.logger.WithFields(logrus.Fields{
