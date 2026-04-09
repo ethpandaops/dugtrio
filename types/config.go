@@ -54,6 +54,8 @@ type ProxyConfig struct {
 	BlockedPathsStr string        `envconfig:"PROXY_BLOCKED_PATHS"`
 	BlockedPaths    []string      `yaml:"blockedPaths"`
 	Auth            *AuthConfig   `yaml:"auth"`
+	RequireTokens   bool          `yaml:"require_tokens" envconfig:"PROXY_REQUIRE_TOKENS"`
+	Clients         []*ClientConfig `yaml:"clients"`
 
 	// RebalanceInterval is how often to check for session imbalances (0 = disabled)
 	RebalanceInterval time.Duration `yaml:"rebalanceInterval"`
@@ -76,6 +78,12 @@ type FrontendConfig struct {
 type AuthConfig struct {
 	Required bool   `yaml:"required" envconfig:"PROXY_AUTH_REQUIRED"`
 	Password string `yaml:"password" envconfig:"PROXY_AUTH_PASSWORD"`
+}
+
+type ClientConfig struct {
+	Token       string `yaml:"token"`
+	Name        string `yaml:"name"`
+	BillingCode string `yaml:"billing_code"`
 }
 
 type MetricsConfig struct {
