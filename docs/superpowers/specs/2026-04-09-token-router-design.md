@@ -57,6 +57,20 @@ type ClientConfig struct {
 Clients []*ClientConfig `yaml:"clients"`
 ```
 
+Two additional flags control migration mode:
+
+```yaml
+proxy:
+  require_tokens: false   # default; set true to enforce token-only access
+  clients:
+    - token: "abc123def456"
+      name: "Acme Corp"
+      billing_code: "ACM-ETH-01"
+```
+
+- `require_tokens: false` (default) — token URLs work alongside existing direct access (`/eth/v1/...`); zero breaking change for current clients
+- `require_tokens: true` — direct `/eth/`, `/lighthouse/`, etc. routes return `401 Unauthorized`; only token-prefixed URLs are accepted
+
 At startup, `TokenRouter` builds `map[string]*types.ClientConfig` (token → config) for O(1) lookup. Raw token strings never appear in logs or metric labels — `BillingCode` is used everywhere a machine-readable identifier is needed; `Name` is display-only.
 
 ---
@@ -95,7 +109,7 @@ router.PathPrefix("/{token}/").Handler(tokenRouter)
 
 Because gorilla/mux matches in registration order, all known prefixes take priority. The `/{token}/` wildcard only fires for paths that haven't already matched. `TokenRouter.ServeHTTP` then validates the captured segment against the token map and returns 401 if unknown.
 
-The existing `/eth/` and client-specific prefix routes remain for Basic Auth users and unauthenticated access.
+When `require_tokens: false` (default), the existing `/eth/` and client-specific prefix routes remain fully functional — no changes for current clients. When `require_tokens: true`, a guard middleware wraps those routes and returns `401` before they are reached.
 
 ### Context key
 
@@ -162,12 +176,12 @@ Existing `/metrics` Prometheus endpoint — no new endpoint required.
 
 | File | Change |
 |---|---|
-| `types/config.go` | Add `ClientConfig`, add `Clients []*ClientConfig` to `ProxyConfig` |
+| `types/config.go` | Add `ClientConfig`, add `Clients []*ClientConfig` and `RequireTokens bool` to `ProxyConfig` |
 | `proxy/tokenrouter.go` | New — `TokenRouter` struct and `ServeHTTP` |
 | `proxy/pathutil.go` | New — `NormalizePath` function |
 | `proxy/beaconproxy.go` | Read client name from context, increment metric in `processCall` |
 | `metrics/metrics.go` | Add `ClientRequests` counter vec |
-| `frontend/frontend.go` | Register `/{token}/` route |
+| `cmd/dugtrio-proxy/main.go` | Register `/{token}/` route; wrap legacy routes with guard when `require_tokens: true` |
 
 ---
 
@@ -176,3 +190,36 @@ Existing `/metrics` Prometheus endpoint — no new endpoint required.
 - **Path normalization completeness** — the Beacon API has ~80+ paths; the normalizer only needs to cover paths that are actually called, so it can grow incrementally. Unrecognized paths are safe (just high-cardinality if called with many unique IDs).
 - **Token masking** — `TokenRouter` strips the token from `r.URL.Path` before any log statement or upstream request. All log fields and metric labels use `billing_code` exclusively. The raw token only exists in memory at the moment of lookup and is never forwarded or recorded. Operators should still configure their reverse proxy (nginx/Caddy) to redact the first URL path segment if access logs are retained.
 - **Basic Auth coexistence** — both auth mechanisms are independent code paths. Operators can run both during migration or use one exclusively.
+
+---
+
+## Rollout Plan
+
+Migration from direct access to token-prefixed URLs in three phases, each independently deployable.
+
+### Phase 1 — Deploy with tokens, direct access still open
+
+`require_tokens: false` (default). Add `proxy.clients` to config and redeploy.
+
+- Existing clients are unaffected — all direct `/eth/v1/...` calls continue to work
+- New token URLs become available immediately
+- Metrics start recording per-`billing_code` breakdowns for token-using clients
+- Goal: validate that token routing and metrics work in production before touching existing clients
+
+### Phase 2 — Migrate clients to token URLs
+
+Distribute a token URL to each client and ask them to update their endpoint config. No dugtrio change required.
+
+- Run Phase 1 and Phase 2 in parallel: some clients on token URLs, some still on direct access
+- `billing_code` metrics give visibility into which clients have migrated (non-empty label) vs. not (empty label)
+- Direct access remains fully functional during this window
+
+### Phase 3 — Enforce token-only access
+
+Once all clients confirm they are on token URLs, flip `require_tokens: true` and redeploy.
+
+- Legacy routes (`/eth/`, `/lighthouse/`, etc.) return `401` for unauthenticated requests
+- Any client that missed migration gets an immediate, clear error (not a silent failure)
+- Basic Auth (`proxy.auth`) is unaffected if still in use alongside token auth
+
+**Rollback at any phase:** set `require_tokens: false` (or remove it entirely) and redeploy — zero data loss, zero downtime.
