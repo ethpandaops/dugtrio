@@ -64,7 +64,7 @@ func startDugtrio(config *types.Config) {
 
 	// init metrics
 	var proxyMetrics *metrics.ProxyMetrics
-	if config.Metrics.Enabled {
+	if config.Metrics != nil && config.Metrics.Enabled {
 		proxyMetrics = metrics.NewProxyMetrics(beaconPool)
 
 		router.Path("/metrics").Handler(promhttp.Handler())
@@ -76,17 +76,19 @@ func startDugtrio(config *types.Config) {
 		logrus.Fatalf("error initializing beacon proxy: %v", err)
 	}
 
+	requireTokens := config.Proxy != nil && config.Proxy.RequireTokens
+
 	// standardized beacon node endpoints
-	router.PathPrefix("/eth/").Handler(beaconProxy)
+	router.PathPrefix("/eth/").Handler(requireTokensGuard(requireTokens, beaconProxy))
 
 	// client specific endpoints
-	router.PathPrefix("/caplin/").Handler(beaconProxy.NewClientSpecificProxy(pool.CaplinClient))
-	router.PathPrefix("/grandine/").Handler(beaconProxy.NewClientSpecificProxy(pool.GrandineClient))
-	router.PathPrefix("/lighthouse/").Handler(beaconProxy.NewClientSpecificProxy(pool.LighthouseClient))
-	router.PathPrefix("/lodestar/").Handler(beaconProxy.NewClientSpecificProxy(pool.LodestarClient))
-	router.PathPrefix("/nimbus/").Handler(beaconProxy.NewClientSpecificProxy(pool.NimbusClient))
-	router.PathPrefix("/prysm/").Handler(beaconProxy.NewClientSpecificProxy(pool.PrysmClient))
-	router.PathPrefix("/teku/").Handler(beaconProxy.NewClientSpecificProxy(pool.TekuClient))
+	router.PathPrefix("/caplin/").Handler(requireTokensGuard(requireTokens, beaconProxy.NewClientSpecificProxy(pool.CaplinClient)))
+	router.PathPrefix("/grandine/").Handler(requireTokensGuard(requireTokens, beaconProxy.NewClientSpecificProxy(pool.GrandineClient)))
+	router.PathPrefix("/lighthouse/").Handler(requireTokensGuard(requireTokens, beaconProxy.NewClientSpecificProxy(pool.LighthouseClient)))
+	router.PathPrefix("/lodestar/").Handler(requireTokensGuard(requireTokens, beaconProxy.NewClientSpecificProxy(pool.LodestarClient)))
+	router.PathPrefix("/nimbus/").Handler(requireTokensGuard(requireTokens, beaconProxy.NewClientSpecificProxy(pool.NimbusClient)))
+	router.PathPrefix("/prysm/").Handler(requireTokensGuard(requireTokens, beaconProxy.NewClientSpecificProxy(pool.PrysmClient)))
+	router.PathPrefix("/teku/").Handler(requireTokensGuard(requireTokens, beaconProxy.NewClientSpecificProxy(pool.TekuClient)))
 
 	/* liveness endpoint - always 200 while the process is running */
 	router.HandleFunc("/livez", beaconProxy.ServeLivezHTTP).Methods("GET")
@@ -94,18 +96,44 @@ func startDugtrio(config *types.Config) {
 	// healthcheck endpoint
 	router.HandleFunc("/healthcheck", beaconProxy.ServeHealthCheckHTTP).Methods("GET")
 
-	if config.Frontend.Pprof {
+	if config.Frontend != nil && config.Frontend.Pprof {
 		// add pprof handler
 		router.PathPrefix("/debug/pprof/").Handler(http.DefaultServeMux)
 	}
 
-	if config.Frontend.Enabled {
+	hasClients := config.Proxy != nil && len(config.Proxy.Clients) > 0
+
+	if hasClients {
+		/* Token router: registered after specific prefixes so they take priority.
+		   When the frontend is also active, exact page routes are registered first,
+		   then the token router catches everything else and falls back to the static
+		   file handler so /static/, /webfonts/, favicon etc. still resolve. */
+		tokenRouter := proxy.NewTokenRouter(beaconProxy, config.Proxy.Clients)
+
+		if config.Frontend != nil && config.Frontend.Enabled {
+			frontendBaseHandler, err := frontend.NewFrontend(config.Frontend)
+			if err != nil {
+				logrus.Fatalf("error initializing frontend: %v", err)
+			}
+
+			/* Exact frontend page routes must be registered BEFORE the PathPrefix("/")
+			   catch-all — gorilla/mux matches in registration order, first match wins. */
+			frontendHandler := handlers.NewFrontendHandler(beaconPool, beaconProxy)
+			router.HandleFunc("/", frontendHandler.Index).Methods("GET")
+			router.HandleFunc("/health", frontendHandler.Health).Methods("GET")
+			router.HandleFunc("/sessions", frontendHandler.Sessions).Methods("GET")
+
+			router.PathPrefix("/").Handler(tokenRouter.WithFallback(frontendBaseHandler))
+		} else {
+			router.PathPrefix("/").Handler(tokenRouter)
+		}
+	} else if config.Frontend != nil && config.Frontend.Enabled {
+		/* No token routing — register frontend as the plain catch-all. */
 		frontendBaseHandler, err := frontend.NewFrontend(config.Frontend)
 		if err != nil {
 			logrus.Fatalf("error initializing frontend: %v", err)
 		}
 
-		// register frontend routes
 		frontendHandler := handlers.NewFrontendHandler(beaconPool, beaconProxy)
 		router.HandleFunc("/", frontendHandler.Index).Methods("GET")
 		router.HandleFunc("/health", frontendHandler.Health).Methods("GET")
@@ -115,6 +143,23 @@ func startDugtrio(config *types.Config) {
 
 	// start http server
 	startHTTPServer(config.Server, router)
+}
+
+// requireTokensGuard wraps h to return 401 when require_tokens is enabled,
+// blocking legacy direct-access routes during Phase 3 migration.
+func requireTokensGuard(required bool, h http.Handler) http.Handler {
+	if !required {
+		return h
+	}
+
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain")
+		w.WriteHeader(http.StatusUnauthorized)
+
+		if _, err := w.Write([]byte("Unauthorized")); err != nil {
+			logrus.Warnf("error writing unauthorized response: %v", err)
+		}
+	})
 }
 
 func startHTTPServer(config *types.ServerConfig, router *mux.Router) {
