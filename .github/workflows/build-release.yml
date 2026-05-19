@@ -79,10 +79,6 @@ jobs:
       run: |
         cd dugtrio_linux_arm64
         tar -czf ../dugtrio_${{ inputs.version }}_linux_arm64.tar.gz .
-    - name: "Generate release package: dugtrio_${{ inputs.version }}_darwin_amd64.tar.gz"
-      run: |
-        cd dugtrio_darwin_amd64
-        tar -czf ../dugtrio_${{ inputs.version }}_darwin_amd64.tar.gz .
     - name: "Generate release package: dugtrio_${{ inputs.version }}_darwin_arm64.tar.gz"
       run: |
         cd dugtrio_darwin_arm64
@@ -114,11 +110,9 @@ jobs:
           | [dugtrio_${{ inputs.version }}_windows_amd64.zip](https://github.com/ethpandaops/dugtrio/releases/download/v${{ inputs.version }}/dugtrio_${{ inputs.version }}_windows_amd64.zip) | dugtrio executables for windows/amd64 |
           | [dugtrio_${{ inputs.version }}_linux_amd64.tar.gz](https://github.com/ethpandaops/dugtrio/releases/download/v${{ inputs.version }}/dugtrio_${{ inputs.version }}_linux_amd64.tar.gz) | dugtrio executables for linux/amd64 |
           | [dugtrio_${{ inputs.version }}_linux_arm64.tar.gz](https://github.com/ethpandaops/dugtrio/releases/download/v${{ inputs.version }}/dugtrio_${{ inputs.version }}_linux_arm64.tar.gz) | dugtrio executables for linux/arm64 |
-          | [dugtrio_${{ inputs.version }}_darwin_amd64.tar.gz](https://github.com/ethpandaops/dugtrio/releases/download/v${{ inputs.version }}/dugtrio_${{ inputs.version }}_darwin_amd64.tar.gz) | dugtrio executable for macos/amd64 |
           | [dugtrio_${{ inputs.version }}_darwin_arm64.tar.gz](https://github.com/ethpandaops/dugtrio/releases/download/v${{ inputs.version }}/dugtrio_${{ inputs.version }}_darwin_arm64.tar.gz) | dugtrio executable for macos/arm64 |
         files: |
           dugtrio_${{ inputs.version }}_windows_amd64.zip
           dugtrio_${{ inputs.version }}_linux_amd64.tar.gz
           dugtrio_${{ inputs.version }}_linux_arm64.tar.gz
-          dugtrio_${{ inputs.version }}_darwin_amd64.tar.gz
           dugtrio_${{ inputs.version }}_darwin_arm64.tar.gz

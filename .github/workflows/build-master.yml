@@ -105,10 +105,6 @@ jobs:
       run: |
         cd dugtrio_linux_arm64
         tar -czf ../dugtrio_snapshot_linux_arm64.tar.gz .
-    - name: "Generate release package: dugtrio_snapshot_darwin_amd64.tar.gz"
-      run: |
-        cd dugtrio_darwin_amd64
-        tar -czf ../dugtrio_snapshot_darwin_amd64.tar.gz .
     - name: "Generate release package: dugtrio_snapshot_darwin_arm64.tar.gz"
       run: |
         cd dugtrio_darwin_arm64
@@ -131,11 +127,9 @@ jobs:
           | [dugtrio_snapshot_windows_amd64.zip](https://github.com/ethpandaops/dugtrio/releases/download/snapshot/dugtrio_snapshot_windows_amd64.zip) | dugtrio executables for windows/amd64 |
           | [dugtrio_snapshot_linux_amd64.tar.gz](https://github.com/ethpandaops/dugtrio/releases/download/snapshot/dugtrio_snapshot_linux_amd64.tar.gz) | dugtrio executables for linux/amd64 |
           | [dugtrio_snapshot_linux_arm64.tar.gz](https://github.com/ethpandaops/dugtrio/releases/download/snapshot/dugtrio_snapshot_linux_arm64.tar.gz) | dugtrio executables for linux/arm64 |
-          | [dugtrio_snapshot_darwin_amd64.tar.gz](https://github.com/ethpandaops/dugtrio/releases/download/snapshot/dugtrio_snapshot_darwin_amd64.tar.gz) | dugtrio executable for macos/amd64 |
           | [dugtrio_snapshot_darwin_arm64.tar.gz](https://github.com/ethpandaops/dugtrio/releases/download/snapshot/dugtrio_snapshot_darwin_arm64.tar.gz) | dugtrio executable for macos/arm64 |
         files: |
           dugtrio_snapshot_windows_amd64.zip
           dugtrio_snapshot_linux_amd64.tar.gz
           dugtrio_snapshot_linux_arm64.tar.gz
-          dugtrio_snapshot_darwin_amd64.tar.gz
           dugtrio_snapshot_darwin_arm64.tar.gz
