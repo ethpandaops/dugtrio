@@ -35,7 +35,7 @@
                       {{ else if eq $client.Status "synchronizing" }}
                         <span class="badge rounded-pill text-bg-warning" data-bs-toggle="tooltip" data-bs-placement="top" title="Updated: {{ formatTimeDiff $client.LastRefresh }}">Synchronizing</span>
                       {{ else if eq $client.Status "optimistic" }}
-                        <span class="badge rounded-pill text-bg-warning" data-bs-toggle="tooltip" data-bs-placement="top" title="Updated: {{ formatTimeDiff $client.LastRefresh }}">Optimistic</span>
+                        <span class="badge rounded-pill text-bg-info" data-bs-toggle="tooltip" data-bs-placement="top" title="Updated: {{ formatTimeDiff $client.LastRefresh }}">Optimistic</span>
                       {{ else if eq $client.Status "offline" }}
                         <span class="badge rounded-pill text-bg-danger" data-bs-toggle="tooltip" data-bs-placement="top" title="Updated: {{ formatTimeDiff $client.LastRefresh }}, Error: {{ $client.LastError }}">Offline</span>
                       {{ else }}
@@ -175,7 +175,7 @@
     {{ else if eq .Client.Status "synchronizing" }}
       <span class="badge rounded-pill text-bg-warning" data-bs-toggle="tooltip" data-bs-placement="top" title="Updated: {{ formatTimeDiff .Client.LastRefresh }}">Synchronizing</span>
     {{ else if eq .Client.Status "optimistic" }}
-      <span class="badge rounded-pill text-bg-warning" data-bs-toggle="tooltip" data-bs-placement="top" title="Updated: {{ formatTimeDiff .Client.LastRefresh }}">Optimistic</span>
+      <span class="badge rounded-pill text-bg-info" data-bs-toggle="tooltip" data-bs-placement="top" title="Updated: {{ formatTimeDiff .Client.LastRefresh }}">Optimistic</span>
     {{ else if eq .Client.Status "offline" }}
       <span class="badge rounded-pill text-bg-danger" data-bs-toggle="tooltip" data-bs-placement="top" title="Updated: {{ formatTimeDiff .Client.LastRefresh }}, Error: {{ .Client.LastError }}">Offline</span>
     {{ else }}
