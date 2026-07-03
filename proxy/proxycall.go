@@ -220,7 +220,7 @@ func (proxy *BeaconProxy) runProxyAttempts(r *http.Request, callContext *proxyCa
 	launchAttempt := func(endpoint *pool.Client) {
 		// the cancel funcs are not deferred on purpose: the winning attempt's context must
 		// stay alive for body streaming, it gets cleaned up with callContext
-		attemptContext, attemptCancel := context.WithCancel(callContext.context) //nolint:gosec // G118: losing attempts are cancelled via abandonAttempts, the winner with callContext
+		attemptContext, attemptCancel := context.WithCancel(callContext.context)
 		attemptCancels[endpoint] = attemptCancel
 		inflight++
 
