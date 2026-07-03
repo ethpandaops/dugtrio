@@ -26,7 +26,6 @@ const failoverMaxBodySize = 1024 * 1024
 
 // failoverContext tracks the state of an endpoint failover eligible call across attempts.
 type failoverContext struct {
-	pathClass   string
 	body        []byte
 	hasBody     bool
 	candidates  []*pool.Client
@@ -251,11 +250,6 @@ func (proxy *BeaconProxy) processProxyCall(w http.ResponseWriter, r *http.Reques
 
 	if failoverCtx != nil && failoverCtx.attempts > 0 {
 		respH.Set("X-Dugtrio-Failover-Attempts", fmt.Sprintf("%d", failoverCtx.attempts))
-
-		// remember this endpoint as the preferred failover target for this path class
-		if resp.StatusCode < 400 {
-			proxy.setFailoverEndpoint(failoverCtx.pathClass, endpoint)
-		}
 	}
 
 	if isEventStream {

@@ -78,21 +78,18 @@ type BeaconProxy struct {
 	sessionMutex sync.Mutex
 	sessions     map[string]*SessionGroup
 
-	failoverPaths     []*regexp.Regexp
-	failoverMutex     sync.Mutex
-	failoverEndpoints map[string]string
+	failoverPaths []*regexp.Regexp
 }
 
 func NewBeaconProxy(config *types.ProxyConfig, beaconPool *pool.BeaconPool, proxyMetrics *metrics.ProxyMetrics) (*BeaconProxy, error) {
 	proxy := BeaconProxy{
-		config:            config,
-		pool:              beaconPool,
-		proxyMetrics:      proxyMetrics,
-		logger:            logrus.WithField("module", "proxy"),
-		blockedPaths:      []*regexp.Regexp{},
-		sessions:          make(map[string]*SessionGroup),
-		failoverPaths:     []*regexp.Regexp{},
-		failoverEndpoints: map[string]string{},
+		config:        config,
+		pool:          beaconPool,
+		proxyMetrics:  proxyMetrics,
+		logger:        logrus.WithField("module", "proxy"),
+		blockedPaths:  []*regexp.Regexp{},
+		sessions:      make(map[string]*SessionGroup),
+		failoverPaths: []*regexp.Regexp{},
 	}
 
 	blockedPaths := []string{}
@@ -381,22 +378,21 @@ func (proxy *BeaconProxy) newFailoverContext(r *http.Request, firstEndpoint *poo
 		return nil
 	}
 
-	pathClass := ""
+	pathMatched := false
 	reqPath := r.URL.EscapedPath()
 
 	for _, failoverPathPattern := range proxy.failoverPaths {
 		if failoverPathPattern.MatchString(reqPath) {
-			pathClass = failoverPathPattern.String()
+			pathMatched = true
 			break
 		}
 	}
 
-	if pathClass == "" {
+	if !pathMatched {
 		return nil
 	}
 
 	failoverCtx := &failoverContext{
-		pathClass:   pathClass,
 		maxAttempts: proxy.config.FailoverMaxAttempts,
 	}
 
@@ -415,7 +411,7 @@ func (proxy *BeaconProxy) newFailoverContext(r *http.Request, firstEndpoint *poo
 		failoverCtx.hasBody = true
 	}
 
-	failoverCtx.candidates = proxy.getFailoverCandidates(pathClass, firstEndpoint, clientType, getMinCgcForPath(r.URL.Path))
+	failoverCtx.candidates = proxy.getFailoverCandidates(firstEndpoint, clientType, getMinCgcForPath(r.URL.Path))
 	if len(failoverCtx.candidates) == 0 {
 		return nil
 	}
@@ -423,18 +419,13 @@ func (proxy *BeaconProxy) newFailoverContext(r *http.Request, firstEndpoint *poo
 	return failoverCtx
 }
 
-// getFailoverCandidates returns the ready endpoints to try as failover alternatives, ordered by
-// the last endpoint known to serve this path class first, followed by the remaining endpoints
+// getFailoverCandidates returns the ready endpoints to try as failover alternatives,
 // interleaved by client type so each client implementation is covered as early as possible.
-func (proxy *BeaconProxy) getFailoverCandidates(pathClass string, firstEndpoint *pool.Client, clientType pool.ClientType, minCgc uint16) []*pool.Client {
+func (proxy *BeaconProxy) getFailoverCandidates(firstEndpoint *pool.Client, clientType pool.ClientType, minCgc uint16) []*pool.Client {
 	canonicalFork := proxy.pool.GetCanonicalFork()
 	if canonicalFork == nil {
 		return nil
 	}
-
-	preferredName := proxy.getFailoverEndpointName(pathClass)
-
-	var preferred *pool.Client
 
 	clientsByType := map[pool.ClientType][]*pool.Client{}
 	clientTypes := []pool.ClientType{}
@@ -452,11 +443,6 @@ func (proxy *BeaconProxy) getFailoverCandidates(pathClass string, firstEndpoint 
 			continue
 		}
 
-		if preferred == nil && client.GetName() == preferredName {
-			preferred = client
-			continue
-		}
-
 		cType := client.GetClientType()
 		if _, ok := clientsByType[cType]; !ok {
 			clientTypes = append(clientTypes, cType)
@@ -466,9 +452,6 @@ func (proxy *BeaconProxy) getFailoverCandidates(pathClass string, firstEndpoint 
 	}
 
 	candidates := make([]*pool.Client, 0, len(canonicalFork.ReadyClients))
-	if preferred != nil {
-		candidates = append(candidates, preferred)
-	}
 
 	for idx := 0; ; idx++ {
 		added := false
@@ -486,20 +469,6 @@ func (proxy *BeaconProxy) getFailoverCandidates(pathClass string, firstEndpoint 
 	}
 
 	return candidates
-}
-
-func (proxy *BeaconProxy) getFailoverEndpointName(pathClass string) string {
-	proxy.failoverMutex.Lock()
-	defer proxy.failoverMutex.Unlock()
-
-	return proxy.failoverEndpoints[pathClass]
-}
-
-func (proxy *BeaconProxy) setFailoverEndpoint(pathClass string, endpoint *pool.Client) {
-	proxy.failoverMutex.Lock()
-	defer proxy.failoverMutex.Unlock()
-
-	proxy.failoverEndpoints[pathClass] = endpoint.GetName()
 }
 
 func (proxy *BeaconProxy) rebalanceSessionsLoop() {
