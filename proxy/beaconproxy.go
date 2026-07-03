@@ -1,7 +1,6 @@
 package proxy
 
 import (
-	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -64,8 +63,9 @@ var defaultFailoverPaths = []string{
 }
 
 const (
-	defaultFailoverMaxAttempts    = 8
-	defaultFailoverAttemptTimeout = 20 * time.Second
+	defaultFailoverMaxAttempts = 8
+	defaultFailoverHedgeDelay  = 20 * time.Second
+	defaultFailoverMaxParallel = 2
 )
 
 type BeaconProxy struct {
@@ -143,8 +143,12 @@ func NewBeaconProxy(config *types.ProxyConfig, beaconPool *pool.BeaconPool, prox
 		config.FailoverMaxAttempts = defaultFailoverMaxAttempts
 	}
 
-	if config.FailoverAttemptTimeout == 0 {
-		config.FailoverAttemptTimeout = defaultFailoverAttemptTimeout
+	if config.FailoverHedgeDelay == 0 {
+		config.FailoverHedgeDelay = defaultFailoverHedgeDelay
+	}
+
+	if config.FailoverMaxParallel == 0 {
+		config.FailoverMaxParallel = defaultFailoverMaxParallel
 	}
 
 	if config.RebalanceInterval > 0 {
@@ -257,41 +261,17 @@ func (proxy *BeaconProxy) processCall(w http.ResponseWriter, r *http.Request, cl
 		session.removeActiveContext(contextID)
 	}()
 
-	for {
-		err = proxy.processProxyCall(w, r, callContext, session, endpoint, failoverCtx)
-		if err == nil {
-			return
-		}
-
-		if failoverCtx != nil && errors.Is(err, errFailoverAttempt) {
-			nextEndpoint := failoverCtx.nextEndpoint()
-			if nextEndpoint != nil {
-				proxy.logger.WithFields(logrus.Fields{
-					"method": r.Method,
-					"url":    utils.GetRedactedURL(r.URL.String()),
-				}).Debugf("failover: retrying on %v (%v)", nextEndpoint.GetName(), err)
-
-				endpoint = nextEndpoint
-
-				continue
-			}
-		}
-
+	err = proxy.processProxyCall(w, r, callContext, session, endpoint, failoverCtx)
+	if err != nil {
 		w.Header().Set("Content-Type", "text/html")
 		w.WriteHeader(http.StatusInternalServerError)
 
-		proxy.logger.WithFields(logrus.Fields{
-			"endpoint": endpoint.GetName(),
-			"method":   r.Method,
-			"url":      utils.GetRedactedURL(r.URL.String()),
-		}).Warnf("proxy error %v", err)
+		proxy.callLogEntry(r).WithField("endpoint", endpoint.GetName()).Warnf("proxy error %v", err)
 
 		_, err = w.Write([]byte("Internal Server Error"))
 		if err != nil {
 			proxy.logger.Warnf("error writing internal server error response: %v", err)
 		}
-
-		return
 	}
 }
 

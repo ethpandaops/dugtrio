@@ -52,8 +52,7 @@ proxy:
     - ^/eth/v[0-9]+/debug/.*
 
   # endpoint failover: retry data queries on other ready endpoints when an endpoint
-  # cannot serve the requested data (404/500/501/503, connection error or timeout).
-  # the last endpoint that successfully served a path class is tried first.
+  # cannot serve the requested data (404/500/501/503 or connection error).
   #failoverDisabled: false
 
   # api path patterns (regex) eligible for endpoint failover (default: state queries)
@@ -64,8 +63,13 @@ proxy:
   # maximum number of alternate endpoints to try per call (negative = all ready endpoints)
   #failoverMaxAttempts: 8
 
-  # per-attempt timeout while alternate endpoints remain (the last attempt uses the remaining call timeout)
-  #failoverAttemptTimeout: 20s
+  # how long an attempt may stay silent before the next candidate endpoint is raced in
+  # parallel; the silent attempt keeps running until the call timeout, so slow endpoints
+  # get their full time to respond while hanging endpoints only cost latency
+  #failoverHedgeDelay: 20s
+
+  # maximum number of hedged attempts running in parallel per call
+  #failoverMaxParallel: 2
 
   # optional authorization
   auth:

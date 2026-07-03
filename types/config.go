@@ -62,8 +62,11 @@ type ProxyConfig struct {
 	FailoverPaths []string `yaml:"failoverPaths"`
 	// FailoverMaxAttempts is the maximum number of alternate endpoints to try per call (default: 8, negative = all ready endpoints)
 	FailoverMaxAttempts int `yaml:"failoverMaxAttempts" envconfig:"PROXY_FAILOVER_MAX_ATTEMPTS"`
-	// FailoverAttemptTimeout is the per-attempt timeout while alternate endpoints remain (default: 20s)
-	FailoverAttemptTimeout time.Duration `yaml:"failoverAttemptTimeout" envconfig:"PROXY_FAILOVER_ATTEMPT_TIMEOUT"`
+	// FailoverHedgeDelay is how long an attempt may stay silent before the next candidate
+	// endpoint is tried in parallel; the silent attempt keeps running (default: 20s)
+	FailoverHedgeDelay time.Duration `yaml:"failoverHedgeDelay" envconfig:"PROXY_FAILOVER_HEDGE_DELAY"`
+	// FailoverMaxParallel is the maximum number of hedged attempts running in parallel per call (default: 2)
+	FailoverMaxParallel int `yaml:"failoverMaxParallel" envconfig:"PROXY_FAILOVER_MAX_PARALLEL"`
 
 	// RebalanceInterval is how often to check for session imbalances (0 = disabled)
 	RebalanceInterval time.Duration `yaml:"rebalanceInterval"`
