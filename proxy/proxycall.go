@@ -2,7 +2,9 @@ package proxy
 
 import (
 	"bufio"
+	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -13,6 +15,56 @@ import (
 	"github.com/ethpandaops/dugtrio/pool"
 	"github.com/ethpandaops/dugtrio/utils"
 )
+
+// errFailoverAttempt signals that the upstream call failed in a way that should be
+// retried on the next failover candidate endpoint.
+var errFailoverAttempt = errors.New("endpoint failover")
+
+// failoverMaxBodySize is the maximum request body size that gets buffered for replay
+// on alternate endpoints.
+const failoverMaxBodySize = 1024 * 1024
+
+// failoverContext tracks the state of an endpoint failover eligible call across attempts.
+type failoverContext struct {
+	pathClass   string
+	body        []byte
+	hasBody     bool
+	candidates  []*pool.Client
+	nextIdx     int
+	attempts    int
+	maxAttempts int
+}
+
+func (failoverCtx *failoverContext) hasNext() bool {
+	if failoverCtx.maxAttempts >= 0 && failoverCtx.attempts >= failoverCtx.maxAttempts {
+		return false
+	}
+
+	return failoverCtx.nextIdx < len(failoverCtx.candidates)
+}
+
+func (failoverCtx *failoverContext) nextEndpoint() *pool.Client {
+	if !failoverCtx.hasNext() {
+		return nil
+	}
+
+	endpoint := failoverCtx.candidates[failoverCtx.nextIdx]
+	failoverCtx.nextIdx++
+	failoverCtx.attempts++
+
+	return endpoint
+}
+
+// isFailoverStatusCode returns true for response codes that indicate the endpoint cannot
+// serve the requested data while another endpoint possibly can (eg. pruned historical states).
+func isFailoverStatusCode(statusCode int) bool {
+	switch statusCode {
+	case http.StatusNotFound, http.StatusInternalServerError, http.StatusNotImplemented, http.StatusServiceUnavailable:
+		return true
+	}
+
+	return false
+}
 
 type proxyCallContext struct {
 	context      context.Context
@@ -59,15 +111,84 @@ ctxLoop:
 	}
 }
 
-func (proxy *BeaconProxy) processProxyCall(w http.ResponseWriter, r *http.Request, session *Session, endpoint *pool.Client) error {
-	callContext := proxy.newProxyCallContext(r.Context(), proxy.config.CallTimeout)
-	contextID := session.addActiveContext(callContext.cancelFn)
+// doProxyAttempt sends the call to the given endpoint and returns the response to stream back.
+// It returns an errFailoverAttempt wrapped error when the attempt failed but should be retried
+// on the next failover candidate endpoint.
+func (proxy *BeaconProxy) doProxyAttempt(r *http.Request, callContext *proxyCallContext, endpoint *pool.Client, failoverCtx *failoverContext, proxyURL *url.URL, hh http.Header) (*http.Response, error) {
+	// construct request to send to origin server
+	reqBody := r.Body
+	if failoverCtx != nil && failoverCtx.hasBody {
+		reqBody = io.NopCloser(bytes.NewReader(failoverCtx.body))
+	}
 
-	defer func() {
-		callContext.cancelFn()
-		session.removeActiveContext(contextID)
-	}()
+	req := &http.Request{
+		Method:        r.Method,
+		URL:           proxyURL,
+		Header:        hh,
+		Body:          reqBody,
+		ContentLength: r.ContentLength,
+		Close:         r.Close,
+	}
 
+	// while failover candidates remain, bound this attempt so a hanging endpoint doesn't
+	// consume the whole call timeout (the last attempt runs on the remaining call timeout)
+	reqContext := callContext.context
+
+	var attemptTimer *time.Timer
+
+	if failoverCtx != nil && failoverCtx.hasNext() {
+		var attemptCancel context.CancelFunc
+
+		// the cancel func is not deferred on purpose: on an accepted response the attempt
+		// context must stay alive for body streaming, it gets cleaned up with callContext
+		reqContext, attemptCancel = context.WithCancel(callContext.context)
+		attemptTimer = time.AfterFunc(proxy.config.FailoverAttemptTimeout, attemptCancel)
+	}
+
+	start := time.Now()
+	client := &http.Client{Timeout: 0}
+	req = req.WithContext(reqContext)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		if failoverCtx != nil && failoverCtx.hasNext() && !callContext.cancelled && callContext.context.Err() == nil {
+			return nil, fmt.Errorf("%w: request error on %v: %w", errFailoverAttempt, endpoint.GetName(), err)
+		}
+
+		return nil, fmt.Errorf("proxy request error: %w", err)
+	}
+
+	if callContext.cancelled {
+		resp.Body.Close()
+		return nil, fmt.Errorf("proxy context cancelled")
+	}
+
+	// add to stats
+	if proxy.proxyMetrics != nil {
+		callDuration := time.Since(start)
+		proxy.proxyMetrics.AddCall(endpoint.GetName(), fmt.Sprintf("%s%s", r.Method, r.URL.EscapedPath()), callDuration, resp.StatusCode)
+	}
+
+	if failoverCtx != nil && isFailoverStatusCode(resp.StatusCode) && failoverCtx.hasNext() {
+		resp.Body.Close()
+		return nil, fmt.Errorf("%w: status %v from %v", errFailoverAttempt, resp.StatusCode, endpoint.GetName())
+	}
+
+	if attemptTimer != nil && !attemptTimer.Stop() && reqContext.Err() != nil {
+		// the attempt timeout fired before the response got accepted
+		resp.Body.Close()
+
+		if failoverCtx.hasNext() {
+			return nil, fmt.Errorf("%w: attempt timeout on %v", errFailoverAttempt, endpoint.GetName())
+		}
+
+		return nil, fmt.Errorf("proxy attempt timeout")
+	}
+
+	return resp, nil
+}
+
+func (proxy *BeaconProxy) processProxyCall(w http.ResponseWriter, r *http.Request, callContext *proxyCallContext, session *Session, endpoint *pool.Client, failoverCtx *failoverContext) error {
 	endpointConfig := endpoint.GetEndpointConfig()
 
 	// get filtered headers
@@ -102,36 +223,12 @@ func (proxy *BeaconProxy) processProxyCall(w http.ResponseWriter, r *http.Reques
 		return fmt.Errorf("error parsing proxy url: %w", err)
 	}
 
-	// construct request to send to origin server
-	req := &http.Request{
-		Method:        r.Method,
-		URL:           proxyURL,
-		Header:        hh,
-		Body:          r.Body,
-		ContentLength: r.ContentLength,
-		Close:         r.Close,
-	}
-	start := time.Now()
-	client := &http.Client{Timeout: 0}
-	req = req.WithContext(callContext.context)
-
-	resp, err := client.Do(req)
+	resp, err := proxy.doProxyAttempt(r, callContext, endpoint, failoverCtx, proxyURL, hh) //nolint:bodyclose // body is closed via callContext.streamReader when the call context ends
 	if err != nil {
-		return fmt.Errorf("proxy request error: %w", err)
-	}
-
-	if callContext.cancelled {
-		resp.Body.Close()
-		return fmt.Errorf("proxy context cancelled")
+		return err
 	}
 
 	callContext.streamReader = resp.Body
-
-	// add to stats
-	if proxy.proxyMetrics != nil {
-		callDuration := time.Since(start)
-		proxy.proxyMetrics.AddCall(endpoint.GetName(), fmt.Sprintf("%s%s", r.Method, r.URL.EscapedPath()), callDuration, resp.StatusCode)
-	}
 
 	respContentType := resp.Header.Get("Content-Type")
 	isEventStream := respContentType == "text/event-stream" || strings.HasPrefix(r.URL.EscapedPath(), "/eth/v1/events")
@@ -151,6 +248,15 @@ func (proxy *BeaconProxy) processProxyCall(w http.ResponseWriter, r *http.Reques
 	respH.Set("X-Dugtrio-Endpoint-Name", endpoint.GetName())
 	respH.Set("X-Dugtrio-Endpoint-Type", endpoint.GetClientType().String())
 	respH.Set("X-Dugtrio-Endpoint-Version", endpoint.GetVersion())
+
+	if failoverCtx != nil && failoverCtx.attempts > 0 {
+		respH.Set("X-Dugtrio-Failover-Attempts", fmt.Sprintf("%d", failoverCtx.attempts))
+
+		// remember this endpoint as the preferred failover target for this path class
+		if resp.StatusCode < 400 {
+			proxy.setFailoverEndpoint(failoverCtx.pathClass, endpoint)
+		}
+	}
 
 	if isEventStream {
 		respH.Set("X-Accel-Buffering", "no")

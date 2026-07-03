@@ -56,6 +56,15 @@ type ProxyConfig struct {
 	BlockedPaths    []string      `yaml:"blockedPaths"`
 	Auth            *AuthConfig   `yaml:"auth"`
 
+	// FailoverDisabled disables retrying calls on other endpoints when an endpoint cannot serve the requested data
+	FailoverDisabled bool `yaml:"failoverDisabled" envconfig:"PROXY_FAILOVER_DISABLED"`
+	// FailoverPaths are the api path patterns eligible for endpoint failover (default: state queries)
+	FailoverPaths []string `yaml:"failoverPaths"`
+	// FailoverMaxAttempts is the maximum number of alternate endpoints to try per call (default: 8, negative = all ready endpoints)
+	FailoverMaxAttempts int `yaml:"failoverMaxAttempts" envconfig:"PROXY_FAILOVER_MAX_ATTEMPTS"`
+	// FailoverAttemptTimeout is the per-attempt timeout while alternate endpoints remain (default: 20s)
+	FailoverAttemptTimeout time.Duration `yaml:"failoverAttemptTimeout" envconfig:"PROXY_FAILOVER_ATTEMPT_TIMEOUT"`
+
 	// RebalanceInterval is how often to check for session imbalances (0 = disabled)
 	RebalanceInterval time.Duration `yaml:"rebalanceInterval"`
 	// RebalanceThreshold is the percentage difference from ideal distribution that triggers rebalancing (0-1)
