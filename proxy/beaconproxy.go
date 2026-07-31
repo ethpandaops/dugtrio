@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"fmt"
+	"io"
 	"math"
 	"net/http"
 	"net/url"
@@ -53,6 +54,20 @@ var passthruResponseHeaderKeys = [...]string{
 	"Vary",
 }
 
+// defaultFailoverPaths are the api paths eligible for endpoint failover by default.
+// These are data queries where availability differs per endpoint (eg. historical states
+// are only served by nodes with state archiving enabled).
+var defaultFailoverPaths = []string{
+	"^/eth/v[0-9]+/beacon/states/",
+	"^/eth/v[0-9]+/debug/beacon/states/",
+}
+
+const (
+	defaultFailoverMaxAttempts = 8
+	defaultFailoverHedgeDelay  = 20 * time.Second
+	defaultFailoverMaxParallel = 2
+)
+
 type BeaconProxy struct {
 	config       *types.ProxyConfig
 	pool         *pool.BeaconPool
@@ -62,16 +77,19 @@ type BeaconProxy struct {
 
 	sessionMutex sync.Mutex
 	sessions     map[string]*SessionGroup
+
+	failoverPaths []*regexp.Regexp
 }
 
 func NewBeaconProxy(config *types.ProxyConfig, beaconPool *pool.BeaconPool, proxyMetrics *metrics.ProxyMetrics) (*BeaconProxy, error) {
 	proxy := BeaconProxy{
-		config:       config,
-		pool:         beaconPool,
-		proxyMetrics: proxyMetrics,
-		logger:       logrus.WithField("module", "proxy"),
-		blockedPaths: []*regexp.Regexp{},
-		sessions:     make(map[string]*SessionGroup),
+		config:        config,
+		pool:          beaconPool,
+		proxyMetrics:  proxyMetrics,
+		logger:        logrus.WithField("module", "proxy"),
+		blockedPaths:  []*regexp.Regexp{},
+		sessions:      make(map[string]*SessionGroup),
+		failoverPaths: []*regexp.Regexp{},
 	}
 
 	blockedPaths := []string{}
@@ -96,12 +114,41 @@ func NewBeaconProxy(config *types.ProxyConfig, beaconPool *pool.BeaconPool, prox
 		proxy.blockedPaths = append(proxy.blockedPaths, blockedPathPattern)
 	}
 
+	if !config.FailoverDisabled {
+		failoverPaths := config.FailoverPaths
+		if failoverPaths == nil {
+			failoverPaths = defaultFailoverPaths
+		}
+
+		for _, failoverPath := range failoverPaths {
+			failoverPathPattern, err := regexp.Compile(failoverPath)
+			if err != nil {
+				proxy.logger.Errorf("error parsing failover path pattern '%v': %v", failoverPath, err)
+				continue
+			}
+
+			proxy.failoverPaths = append(proxy.failoverPaths, failoverPathPattern)
+		}
+	}
+
 	if config.CallTimeout == 0 {
 		config.CallTimeout = 60 * time.Second
 	}
 
 	if config.SessionTimeout == 0 {
 		config.SessionTimeout = 10 * time.Minute
+	}
+
+	if config.FailoverMaxAttempts == 0 {
+		config.FailoverMaxAttempts = defaultFailoverMaxAttempts
+	}
+
+	if config.FailoverHedgeDelay == 0 {
+		config.FailoverHedgeDelay = defaultFailoverHedgeDelay
+	}
+
+	if config.FailoverMaxParallel == 0 {
+		config.FailoverMaxParallel = defaultFailoverMaxParallel
 	}
 
 	if config.RebalanceInterval > 0 {
@@ -177,7 +224,7 @@ func (proxy *BeaconProxy) processCall(w http.ResponseWriter, r *http.Request, cl
 		return
 	}
 
-	endpoint, err := proxy.getEndpointForCall(r, session, clientType)
+	endpoint, effectiveClientType, pinned, err := proxy.getEndpointForCall(r, session, clientType)
 	if err != nil {
 		w.Header().Set("Content-Type", "text/html")
 		w.WriteHeader(http.StatusServiceUnavailable)
@@ -204,16 +251,22 @@ func (proxy *BeaconProxy) processCall(w http.ResponseWriter, r *http.Request, cl
 
 	session.group.requests.Add(1)
 
-	err = proxy.processProxyCall(w, r, session, endpoint)
+	failoverCtx := proxy.newFailoverContext(r, endpoint, effectiveClientType, pinned)
+
+	callContext := proxy.newProxyCallContext(r.Context(), proxy.config.CallTimeout)
+	contextID := session.addActiveContext(callContext.cancelFn)
+
+	defer func() {
+		callContext.cancelFn()
+		session.removeActiveContext(contextID)
+	}()
+
+	err = proxy.processProxyCall(w, r, callContext, session, endpoint, failoverCtx)
 	if err != nil {
 		w.Header().Set("Content-Type", "text/html")
 		w.WriteHeader(http.StatusInternalServerError)
 
-		proxy.logger.WithFields(logrus.Fields{
-			"endpoint": endpoint.GetName(),
-			"method":   r.Method,
-			"url":      utils.GetRedactedURL(r.URL.String()),
-		}).Warnf("proxy error %v", err)
+		proxy.callLogEntry(r).WithField("endpoint", endpoint.GetName()).Warnf("proxy error %v", err)
 
 		_, err = w.Write([]byte("Internal Server Error"))
 		if err != nil {
@@ -233,16 +286,20 @@ func (proxy *BeaconProxy) checkBlockedPaths(reqURL *url.URL) bool {
 	return false
 }
 
-func (proxy *BeaconProxy) getEndpointForCall(r *http.Request, session *Session, clientType pool.ClientType) (*pool.Client, error) {
-	var endpoint *pool.Client
+func getMinCgcForPath(path string) uint16 {
+	if strings.HasPrefix(path, "/eth/v1/beacon/blobs/") {
+		return 64 // 64 is the minimum CGC for blobs
+	}
+
+	return 0
+}
+
+func (proxy *BeaconProxy) getEndpointForCall(r *http.Request, session *Session, clientType pool.ClientType) (endpoint *pool.Client, effectiveClientType pool.ClientType, pinned bool, err error) {
 	if proxy.config.StickyEndpoint && proxy.pool.IsClientReady(session.lastPoolClient) {
 		endpoint = session.lastPoolClient
 	}
 
-	minCgc := uint16(0)
-	if strings.HasPrefix(r.URL.Path, "/eth/v1/beacon/blobs/") {
-		minCgc = 64 // 64 is the minimum CGC for blobs
-	}
+	minCgc := getMinCgcForPath(r.URL.Path)
 
 	nextEndpoint := r.Header.Get("X-Dugtrio-Next-Endpoint")
 	if nextEndpoint == "" {
@@ -257,31 +314,141 @@ func (proxy *BeaconProxy) getEndpointForCall(r *http.Request, session *Session, 
 			clientType = nextEndpointType
 		} else if client := proxy.pool.GetEndpointByName(nextEndpoint); client != nil {
 			if client.GetCustodyGroupCount() < minCgc {
-				return nil, fmt.Errorf("endpoint %s has too low CGC (%d < %d)", nextEndpoint, client.GetCustodyGroupCount(), minCgc)
+				return nil, clientType, false, fmt.Errorf("endpoint %s has too low CGC (%d < %d)", nextEndpoint, client.GetCustodyGroupCount(), minCgc)
 			}
 
 			endpoint = client
 			clientType = pool.UnspecifiedClient
+			pinned = true
 		} else {
-			return nil, fmt.Errorf("no endpoint matches X-Dugtrio-Next-Endpoint filter")
+			return nil, clientType, false, fmt.Errorf("no endpoint matches X-Dugtrio-Next-Endpoint filter")
 		}
 	}
 
 	if minCgc > 0 && endpoint != nil {
 		if endpoint.GetCustodyGroupCount() < minCgc {
 			endpoint = nil
+			pinned = false
 		}
 	}
 
 	if endpoint == nil || (clientType != pool.UnspecifiedClient && endpoint.GetClientType() != clientType) {
 		endpoint = proxy.pool.GetReadyEndpoint(clientType, minCgc)
+		pinned = false
 
 		if minCgc == 0 {
 			session.setLastPoolClient(endpoint)
 		}
 	}
 
-	return endpoint, nil
+	return endpoint, clientType, pinned, nil
+}
+
+// newFailoverContext prepares an endpoint failover context for calls matching the configured
+// failover paths. Returns nil if the call is not eligible for failover (unmatched path,
+// explicitly pinned endpoint, non-replayable body or no alternate endpoints).
+func (proxy *BeaconProxy) newFailoverContext(r *http.Request, firstEndpoint *pool.Client, clientType pool.ClientType, pinned bool) *failoverContext {
+	if pinned || len(proxy.failoverPaths) == 0 {
+		return nil
+	}
+
+	switch r.Method {
+	case http.MethodGet, http.MethodHead, http.MethodPost:
+	default:
+		return nil
+	}
+
+	pathMatched := false
+	reqPath := r.URL.EscapedPath()
+
+	for _, failoverPathPattern := range proxy.failoverPaths {
+		if failoverPathPattern.MatchString(reqPath) {
+			pathMatched = true
+			break
+		}
+	}
+
+	if !pathMatched {
+		return nil
+	}
+
+	failoverCtx := &failoverContext{
+		maxAttempts: proxy.config.FailoverMaxAttempts,
+	}
+
+	// buffer the request body so it can be replayed on alternate endpoints
+	if r.Body != nil && r.Body != http.NoBody && r.ContentLength != 0 {
+		if r.ContentLength < 0 || r.ContentLength > failoverMaxBodySize {
+			return nil
+		}
+
+		body, err := io.ReadAll(io.LimitReader(r.Body, failoverMaxBodySize))
+		if err != nil {
+			return nil
+		}
+
+		failoverCtx.body = body
+		failoverCtx.hasBody = true
+	}
+
+	failoverCtx.candidates = proxy.getFailoverCandidates(firstEndpoint, clientType, getMinCgcForPath(r.URL.Path))
+	if len(failoverCtx.candidates) == 0 {
+		return nil
+	}
+
+	return failoverCtx
+}
+
+// getFailoverCandidates returns the ready endpoints to try as failover alternatives,
+// interleaved by client type so each client implementation is covered as early as possible.
+func (proxy *BeaconProxy) getFailoverCandidates(firstEndpoint *pool.Client, clientType pool.ClientType, minCgc uint16) []*pool.Client {
+	canonicalFork := proxy.pool.GetCanonicalFork()
+	if canonicalFork == nil {
+		return nil
+	}
+
+	clientsByType := map[pool.ClientType][]*pool.Client{}
+	clientTypes := []pool.ClientType{}
+
+	for _, client := range canonicalFork.ReadyClients {
+		if client == firstEndpoint {
+			continue
+		}
+
+		if clientType != pool.UnspecifiedClient && client.GetClientType() != clientType {
+			continue
+		}
+
+		if minCgc > 0 && client.GetCustodyGroupCount() < minCgc {
+			continue
+		}
+
+		cType := client.GetClientType()
+		if _, ok := clientsByType[cType]; !ok {
+			clientTypes = append(clientTypes, cType)
+		}
+
+		clientsByType[cType] = append(clientsByType[cType], client)
+	}
+
+	candidates := make([]*pool.Client, 0, len(canonicalFork.ReadyClients))
+
+	for idx := 0; ; idx++ {
+		added := false
+
+		for _, cType := range clientTypes {
+			if idx < len(clientsByType[cType]) {
+				candidates = append(candidates, clientsByType[cType][idx])
+				added = true
+			}
+		}
+
+		if !added {
+			break
+		}
+	}
+
+	return candidates
 }
 
 func (proxy *BeaconProxy) rebalanceSessionsLoop() {
