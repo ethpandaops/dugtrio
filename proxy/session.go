@@ -39,7 +39,7 @@ type Session struct {
 	group          *SessionGroup
 	prefix         pool.ClientType
 	lastSeen       time.Time
-	lastPoolClient *pool.Client
+	lastPoolClient atomic.Pointer[pool.Client]
 	lastRebalance  time.Time
 	activeContexts struct {
 		sync.Mutex
@@ -263,7 +263,7 @@ func (session *Session) GetPrefix() pool.ClientType {
 }
 
 func (session *Session) GetLastPoolClient() *pool.Client {
-	return session.lastPoolClient
+	return session.lastPoolClient.Load()
 }
 
 func (session *Session) addActiveContext(cancel context.CancelFunc) uint64 {
@@ -295,8 +295,8 @@ func (session *Session) cancelActiveConnections() {
 }
 
 func (session *Session) setLastPoolClient(client *pool.Client) {
-	if session.lastPoolClient != client {
+	previous := session.lastPoolClient.Swap(client)
+	if previous != client {
 		session.cancelActiveConnections()
-		session.lastPoolClient = client
 	}
 }
