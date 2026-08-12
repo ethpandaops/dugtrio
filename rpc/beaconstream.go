@@ -95,11 +95,19 @@ func (bs *BeaconStream) startStream() {
 			case <-bs.killChan:
 				running = false
 			case <-stream.Ready:
-				bs.ReadyChan <- true
+				select {
+				case bs.ReadyChan <- true:
+				case <-bs.killChan:
+					running = false
+				}
 			case err := <-stream.Errors:
 				logger.WithField("client", bs.client.name).Warnf("beacon block stream error: %v", err)
 
-				bs.ReadyChan <- false
+				select {
+				case bs.ReadyChan <- false:
+				case <-bs.killChan:
+					running = false
+				}
 			}
 		}
 	}
@@ -183,9 +191,9 @@ func (bs *BeaconStream) processBlockEvent(evt eventsource.Event) {
 		return
 	}
 
-	bs.EventChan <- &BeaconStreamEvent{
-		Event: StreamBlockEvent,
-		Data:  &parsed,
+	select {
+	case bs.EventChan <- &BeaconStreamEvent{Event: StreamBlockEvent, Data: &parsed}:
+	case <-bs.killChan:
 	}
 }
 
@@ -199,9 +207,10 @@ func (bs *BeaconStream) processHeadEvent(evt eventsource.Event) {
 	}
 
 	bs.lastHeadSeen = time.Now()
-	bs.EventChan <- &BeaconStreamEvent{
-		Event: StreamHeadEvent,
-		Data:  &parsed,
+
+	select {
+	case bs.EventChan <- &BeaconStreamEvent{Event: StreamHeadEvent, Data: &parsed}:
+	case <-bs.killChan:
 	}
 }
 
@@ -214,8 +223,8 @@ func (bs *BeaconStream) processFinalizedEvent(evt eventsource.Event) {
 		return
 	}
 
-	bs.EventChan <- &BeaconStreamEvent{
-		Event: StreamFinalizedEvent,
-		Data:  &parsed,
+	select {
+	case bs.EventChan <- &BeaconStreamEvent{Event: StreamFinalizedEvent, Data: &parsed}:
+	case <-bs.killChan:
 	}
 }
