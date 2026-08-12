@@ -295,8 +295,8 @@ func getMinCgcForPath(path string) uint16 {
 }
 
 func (proxy *BeaconProxy) getEndpointForCall(r *http.Request, session *Session, clientType pool.ClientType) (endpoint *pool.Client, effectiveClientType pool.ClientType, pinned bool, err error) {
-	if proxy.config.StickyEndpoint && proxy.pool.IsClientReady(session.lastPoolClient) {
-		endpoint = session.lastPoolClient
+	if stickyClient := session.lastPoolClient.Load(); proxy.config.StickyEndpoint && proxy.pool.IsClientReady(stickyClient) {
+		endpoint = stickyClient
 	}
 
 	minCgc := getMinCgcForPath(r.URL.Path)
@@ -494,8 +494,8 @@ func (proxy *BeaconProxy) rebalanceSessions() {
 	totalSessions := 0
 
 	for _, session := range allSessions {
-		if session.lastPoolClient != nil && slices.Contains(readyClients, session.lastPoolClient) {
-			endpointTotals[session.lastPoolClient]++
+		if client := session.lastPoolClient.Load(); client != nil && slices.Contains(readyClients, client) {
+			endpointTotals[client]++
 			totalSessions++
 		}
 	}
@@ -564,7 +564,7 @@ func (proxy *BeaconProxy) rebalanceSessions() {
 			constrained := make(map[pool.ClientType][]*Session, 2)
 
 			for _, session := range allSessions {
-				if session.lastPoolClient != srcClient {
+				if session.lastPoolClient.Load() != srcClient {
 					continue
 				}
 
