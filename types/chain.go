@@ -55,14 +55,6 @@ func ParseChainConfig(specValues map[string]interface{}) (*ChainConfig, error) {
 	return specs, nil
 }
 
-func (chain *ChainConfig) GetSlotDurationMs(epoch phase0.Epoch) uint64 {
-	if chain.SlotDurationMsHeze > 0 && uint64(epoch) >= chain.HezeForkEpoch {
-		return chain.SlotDurationMsHeze
-	}
-
-	return chain.SlotDurationMs
-}
-
 func (chain *ChainConfig) CheckMismatch(chain2 *ChainConfig) []string {
 	mismatches := []string{}
 	chainT := reflect.ValueOf(chain).Elem()

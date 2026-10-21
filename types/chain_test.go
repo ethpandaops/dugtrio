@@ -3,8 +3,6 @@ package types
 import (
 	"testing"
 	"time"
-
-	"github.com/attestantio/go-eth2-client/spec/phase0"
 )
 
 func devnet3SpecValues() map[string]interface{} {
@@ -42,42 +40,6 @@ func TestParseChainConfig(t *testing.T) {
 
 	if specs.HezeForkEpoch != FarFutureEpoch {
 		t.Fatalf("expected missing HEZE_FORK_EPOCH to be far future, got %v", specs.HezeForkEpoch)
-	}
-}
-
-func TestGetSlotDurationMs(t *testing.T) {
-	devnet3, err := ParseChainConfig(devnet3SpecValues())
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	unchanged := *devnet3
-	unchanged.SlotDurationMsHeze = 12000
-
-	farFuture := *devnet3
-	farFuture.HezeForkEpoch = FarFutureEpoch
-
-	noHezeDuration := *devnet3
-	noHezeDuration.SlotDurationMsHeze = 0
-
-	tests := []struct {
-		name     string
-		specs    *ChainConfig
-		epoch    phase0.Epoch
-		expected uint64
-	}{
-		{"devnet3 before fork", devnet3, 4, 12000},
-		{"devnet3 at fork", devnet3, 5, 9000},
-		{"devnet3 after fork", devnet3, 1000, 9000},
-		{"unchanged duration", &unchanged, 1000, 12000},
-		{"far future fork", &farFuture, phase0.Epoch(FarFutureEpoch - 1), 12000},
-		{"missing heze duration", &noHezeDuration, 1000, 12000},
-	}
-
-	for _, test := range tests {
-		if duration := test.specs.GetSlotDurationMs(test.epoch); duration != test.expected {
-			t.Errorf("%v: expected %v, got %v", test.name, test.expected, duration)
-		}
 	}
 }
 
