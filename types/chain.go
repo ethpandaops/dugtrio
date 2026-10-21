@@ -48,19 +48,19 @@ func ParseChainConfig(specValues map[string]interface{}) (*ChainConfig, error) {
 
 	if specs.SlotDurationMs == 0 {
 		if secondsPerSlot, ok := specValues["SECONDS_PER_SLOT"].(time.Duration); ok {
-			specs.SlotDurationMs = uint64(secondsPerSlot.Milliseconds())
+			specs.SlotDurationMs = uint64(secondsPerSlot.Milliseconds()) //nolint:gosec // no overflow possible
 		}
 	}
 
 	return specs, nil
 }
 
-func (chain *ChainConfig) GetSlotDuration(epoch phase0.Epoch) time.Duration {
+func (chain *ChainConfig) GetSlotDurationMs(epoch phase0.Epoch) uint64 {
 	if chain.SlotDurationMsHeze > 0 && uint64(epoch) >= chain.HezeForkEpoch {
-		return time.Duration(chain.SlotDurationMsHeze) * time.Millisecond
+		return chain.SlotDurationMsHeze
 	}
 
-	return time.Duration(chain.SlotDurationMs) * time.Millisecond
+	return chain.SlotDurationMs
 }
 
 func (chain *ChainConfig) CheckMismatch(chain2 *ChainConfig) []string {

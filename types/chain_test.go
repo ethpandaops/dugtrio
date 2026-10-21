@@ -45,7 +45,7 @@ func TestParseChainConfig(t *testing.T) {
 	}
 }
 
-func TestGetSlotDuration(t *testing.T) {
+func TestGetSlotDurationMs(t *testing.T) {
 	devnet3, err := ParseChainConfig(devnet3SpecValues())
 	if err != nil {
 		t.Fatal(err)
@@ -64,18 +64,18 @@ func TestGetSlotDuration(t *testing.T) {
 		name     string
 		specs    *ChainConfig
 		epoch    phase0.Epoch
-		expected time.Duration
+		expected uint64
 	}{
-		{"devnet3 before fork", devnet3, 4, 12 * time.Second},
-		{"devnet3 at fork", devnet3, 5, 9 * time.Second},
-		{"devnet3 after fork", devnet3, 1000, 9 * time.Second},
-		{"unchanged duration", &unchanged, 1000, 12 * time.Second},
-		{"far future fork", &farFuture, phase0.Epoch(FarFutureEpoch - 1), 12 * time.Second},
-		{"missing heze duration", &noHezeDuration, 1000, 12 * time.Second},
+		{"devnet3 before fork", devnet3, 4, 12000},
+		{"devnet3 at fork", devnet3, 5, 9000},
+		{"devnet3 after fork", devnet3, 1000, 9000},
+		{"unchanged duration", &unchanged, 1000, 12000},
+		{"far future fork", &farFuture, phase0.Epoch(FarFutureEpoch - 1), 12000},
+		{"missing heze duration", &noHezeDuration, 1000, 12000},
 	}
 
 	for _, test := range tests {
-		if duration := test.specs.GetSlotDuration(test.epoch); duration != test.expected {
+		if duration := test.specs.GetSlotDurationMs(test.epoch); duration != test.expected {
 			t.Errorf("%v: expected %v, got %v", test.name, test.expected, duration)
 		}
 	}
