@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/mashingan/smapping"
 	"github.com/sirupsen/logrus"
 
 	"github.com/ethpandaops/dugtrio/types"
@@ -49,21 +48,19 @@ func (cache *BlockCache) SetClientSpecs(specValues map[string]interface{}) error
 	cache.specMutex.Lock()
 	defer cache.specMutex.Unlock()
 
-	specs := types.ChainConfig{}
-
-	err := smapping.FillStructByTags(&specs, specValues, "yaml")
+	specs, err := types.ParseChainConfig(specValues)
 	if err != nil {
 		return err
 	}
 
 	if cache.specs != nil {
-		mismatches := cache.specs.CheckMismatch(&specs)
+		mismatches := cache.specs.CheckMismatch(specs)
 		if len(mismatches) > 0 {
 			return fmt.Errorf("spec mismatch: %v", strings.Join(mismatches, ", "))
 		}
 	}
 
-	cache.specs = &specs
+	cache.specs = specs
 
 	return nil
 }

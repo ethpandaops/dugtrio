@@ -5,7 +5,10 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/mashingan/smapping"
 )
+
+const FarFutureEpoch = uint64(18446744073709551615)
 
 type ForkVersion struct {
 	Epoch           uint64
@@ -25,8 +28,39 @@ type ChainConfig struct {
 	BellatrixForkEpoch   uint64         `yaml:"BELLATRIX_FORK_EPOCH"`
 	CappellaForkVersion  phase0.Version `yaml:"CAPELLA_FORK_VERSION"`
 	CappellaForkEpoch    uint64         `yaml:"CAPELLA_FORK_EPOCH"`
-	SecondsPerSlot       time.Duration  `yaml:"SECONDS_PER_SLOT"`
+	HezeForkEpoch        uint64         `yaml:"HEZE_FORK_EPOCH" check-if-fork:"HezeForkEpoch"`
+	SlotDurationMs       uint64         `yaml:"SLOT_DURATION_MS"`
+	SlotDurationMsHeze   uint64         `yaml:"SLOT_DURATION_MS_HEZE" check-if-fork:"HezeForkEpoch"`
 	SlotsPerEpoch        uint64         `yaml:"SLOTS_PER_EPOCH"`
+}
+
+func ParseChainConfig(specValues map[string]interface{}) (*ChainConfig, error) {
+	specs := &ChainConfig{}
+
+	err := smapping.FillStructByTags(specs, specValues, "yaml")
+	if err != nil {
+		return nil, err
+	}
+
+	if _, ok := specValues["HEZE_FORK_EPOCH"]; !ok {
+		specs.HezeForkEpoch = FarFutureEpoch
+	}
+
+	if specs.SlotDurationMs == 0 {
+		if secondsPerSlot, ok := specValues["SECONDS_PER_SLOT"].(time.Duration); ok {
+			specs.SlotDurationMs = uint64(secondsPerSlot.Milliseconds())
+		}
+	}
+
+	return specs, nil
+}
+
+func (chain *ChainConfig) GetSlotDuration(epoch phase0.Epoch) time.Duration {
+	if chain.SlotDurationMsHeze > 0 && uint64(epoch) >= chain.HezeForkEpoch {
+		return time.Duration(chain.SlotDurationMsHeze) * time.Millisecond
+	}
+
+	return time.Duration(chain.SlotDurationMs) * time.Millisecond
 }
 
 func (chain *ChainConfig) CheckMismatch(chain2 *ChainConfig) []string {
@@ -35,6 +69,12 @@ func (chain *ChainConfig) CheckMismatch(chain2 *ChainConfig) []string {
 	chain2T := reflect.ValueOf(chain2).Elem()
 
 	for i := 0; i < chainT.NumField(); i++ {
+		if checkIfFork := chainT.Type().Field(i).Tag.Get("check-if-fork"); checkIfFork != "" {
+			if chainT.FieldByName(checkIfFork).Uint() == FarFutureEpoch && chain2T.FieldByName(checkIfFork).Uint() == FarFutureEpoch {
+				continue
+			}
+		}
+
 		if chainT.Field(i).Interface() != chain2T.Field(i).Interface() {
 			mismatches = append(mismatches, chainT.Type().Field(i).Name)
 		}
