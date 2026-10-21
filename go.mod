@@ -1,6 +1,6 @@
 module github.com/ethpandaops/dugtrio
 
-go 1.25.0
+go 1.26.10
 
 require (
 	github.com/attestantio/go-eth2-client v0.29.0

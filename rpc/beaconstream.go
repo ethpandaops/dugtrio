@@ -142,8 +142,6 @@ func (bs *BeaconStream) subscribeStream(endpoint string, events uint16) *eventst
 		}
 
 		fmt.Fprintf(&topics, "finalized_checkpoint")
-
-		topicsCount++
 	}
 
 	for {
