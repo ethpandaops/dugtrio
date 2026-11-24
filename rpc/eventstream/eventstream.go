@@ -34,6 +34,11 @@ type Stream struct {
 	isClosed bool
 	// isClosedMutex is a mutex protecting concurrent read/write access of isClosed
 	closeMutex sync.Mutex
+	// closeChan is closed exactly once, when the stream shuts down. Every send on
+	// Events/Errors is guarded by a select against it, so a shutdown can never race a
+	// send into a panic. Events and Errors themselves are never closed, since closing
+	// them concurrently with an in-flight send would reintroduce the same problem.
+	closeChan chan struct{}
 }
 
 type StreamEvent interface {
@@ -85,6 +90,7 @@ func SubscribeWith(lastEventID string, client *http.Client, request *http.Reques
 		Events:      make(chan StreamEvent),
 		Errors:      make(chan error, 10),
 		Ready:       make(chan bool),
+		closeChan:   make(chan struct{}),
 	}
 	stream.c.CheckRedirect = checkRedirect
 
@@ -109,8 +115,7 @@ func (stream *Stream) Close() {
 		}
 
 		stream.isClosed = true
-		close(stream.Errors)
-		close(stream.Events)
+		close(stream.closeChan)
 	}()
 }
 
@@ -183,19 +188,25 @@ func (stream *Stream) receiveEvents(r io.ReadCloser) {
 			return
 		}
 
-		if err != nil {
-			stream.Errors <- err
+		stream.closeMutex.Unlock()
 
-			stream.closeMutex.Unlock()
+		if err != nil {
+			select {
+			case stream.Errors <- err:
+			case <-stream.closeChan:
+			}
 
 			return
 		}
 
-		stream.closeMutex.Unlock()
-
 		pub, ok := ev.(StreamEvent)
 		if !ok {
-			stream.Errors <- fmt.Errorf("invalid event type: %T", ev)
+			select {
+			case stream.Errors <- fmt.Errorf("invalid event type: %T", ev):
+			case <-stream.closeChan:
+				return
+			}
+
 			continue
 		}
 
@@ -207,7 +218,11 @@ func (stream *Stream) receiveEvents(r io.ReadCloser) {
 			stream.lastEventID = pub.Id()
 		}
 
-		stream.Events <- pub
+		select {
+		case stream.Events <- pub:
+		case <-stream.closeChan:
+			return
+		}
 	}
 }
 
@@ -238,7 +253,11 @@ func (stream *Stream) retryRestartStream() {
 			return
 		}
 
-		stream.Errors <- err
+		select {
+		case stream.Errors <- err:
+		case <-stream.closeChan:
+			return
+		}
 
 		backoff = 10 * time.Second
 	}
