@@ -51,7 +51,7 @@ proxy:
   blockedPaths:
     - ^/eth/v[0-9]+/debug/.*
 
-  # reject state and reward queries for slots older than one epoch before the finalized checkpoint
+  # reject queries for slots or epochs older than one epoch before the finalized checkpoint (stored blocks, headers, blobs and payload envelopes are still served)
   #blockFinalizedStates: false
 
   # endpoint failover: retry data queries on other ready endpoints when an endpoint

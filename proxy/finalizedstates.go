@@ -2,16 +2,32 @@ package proxy
 
 import (
 	"net/url"
-	"regexp"
 	"strconv"
+	"strings"
 )
 
 const finalizedStateGraceEpochs = 1
 
 var (
-	stateSlotPathPattern  = regexp.MustCompile(`^/eth/v\d+/(?:debug/)?beacon/states/(\d+)(?:/|$)`)
-	rewardSlotPathPattern = regexp.MustCompile(`^/eth/v\d+/beacon/rewards/(?:blocks|sync_committee)/(\d+)/?$`)
-	rewardEpochPattern    = regexp.MustCompile(`^/eth/v\d+/beacon/rewards/attestations/(\d+)/?$`)
+	epochResources = map[string]bool{
+		"attestations": true,
+		"proposer":     true,
+		"attester":     true,
+		"sync":         true,
+		"ptc":          true,
+	}
+	storedResources = map[string]bool{
+		"blocks":                      true,
+		"blinded_blocks":              true,
+		"headers":                     true,
+		"blob_sidecars":               true,
+		"blobs":                       true,
+		"execution_payload_envelopes": true,
+	}
+	indexResources = map[string]bool{
+		"validators":         true,
+		"validator_balances": true,
+	}
 )
 
 func (proxy *BeaconProxy) checkFinalizedStateQuery(reqURL *url.URL) bool {
@@ -31,24 +47,51 @@ func (proxy *BeaconProxy) checkFinalizedStateQuery(reqURL *url.URL) bool {
 		return false
 	}
 
-	minEpoch := uint64(finalizedEpoch) - finalizedStateGraceEpochs
-	path := reqURL.EscapedPath()
+	minSlot := (uint64(finalizedEpoch) - finalizedStateGraceEpochs) * specs.SlotsPerEpoch
 
-	if match := rewardEpochPattern.FindStringSubmatch(path); match != nil {
-		epoch, err := strconv.ParseUint(match[1], 10, 64)
-		return err != nil || epoch < minEpoch
+	slot, found := oldestRequestedSlot(reqURL, specs.SlotsPerEpoch)
+
+	return found && slot < minSlot
+}
+
+func oldestRequestedSlot(reqURL *url.URL, slotsPerEpoch uint64) (oldest uint64, found bool) {
+	segments := strings.Split(strings.Trim(reqURL.Path, "/"), "/")
+	if segments[0] != "eth" {
+		return 0, false
 	}
 
-	match := stateSlotPathPattern.FindStringSubmatch(path)
-	if match == nil {
-		match = rewardSlotPathPattern.FindStringSubmatch(path)
+	track := func(value string, isEpoch bool) {
+		slot, err := strconv.ParseUint(value, 10, 64)
+		if err != nil {
+			return
+		}
+
+		if isEpoch {
+			slot *= slotsPerEpoch
+		}
+
+		if !found || slot < oldest {
+			oldest, found = slot, true
+		}
 	}
 
-	if match == nil {
-		return false
+	stored := func(i int) bool {
+		return storedResources[segments[i]] && segments[i-1] != "rewards"
 	}
 
-	slot, err := strconv.ParseUint(match[1], 10, 64)
+	for i := 2; i < len(segments); i++ {
+		if stored(i-1) || indexResources[segments[i-1]] {
+			continue
+		}
 
-	return err != nil || slot < minEpoch*specs.SlotsPerEpoch
+		track(segments[i], epochResources[segments[i-1]])
+	}
+
+	if len(segments) > 1 && !stored(len(segments)-1) {
+		query := reqURL.Query()
+		track(query.Get("slot"), false)
+		track(query.Get("epoch"), true)
+	}
+
+	return oldest, found
 }
