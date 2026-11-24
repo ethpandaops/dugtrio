@@ -15,6 +15,7 @@ var (
 		"attester":     true,
 		"sync":         true,
 		"ptc":          true,
+		"liveness":     true,
 	}
 	storedResources = map[string]bool{
 		"blocks":                      true,
@@ -22,6 +23,7 @@ var (
 		"headers":                     true,
 		"blob_sidecars":               true,
 		"blobs":                       true,
+		"data_column_sidecars":        true,
 		"execution_payload_envelopes": true,
 	}
 	indexResources = map[string]bool{
