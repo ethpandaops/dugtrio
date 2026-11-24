@@ -198,6 +198,18 @@ func (proxy *BeaconProxy) processCall(w http.ResponseWriter, r *http.Request, cl
 		return
 	}
 
+	if proxy.checkFinalizedStateQuery(r.URL) {
+		w.Header().Set("Content-Type", "text/html")
+		w.WriteHeader(http.StatusForbidden)
+
+		_, err := w.Write([]byte("Finalized State Queries Blocked"))
+		if err != nil {
+			proxy.logger.Warnf("error writing finalized state blocked response: %v", err)
+		}
+
+		return
+	}
+
 	identifier, validAuth := proxy.CheckAuthorization(r)
 	if !validAuth {
 		w.Header().Set("Content-Type", "text/html")

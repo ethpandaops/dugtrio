@@ -56,6 +56,8 @@ type ProxyConfig struct {
 	BlockedPaths    []string      `yaml:"blockedPaths"`
 	Auth            *AuthConfig   `yaml:"auth"`
 
+	BlockFinalizedStates bool `yaml:"blockFinalizedStates" envconfig:"PROXY_BLOCK_FINALIZED_STATES"`
+
 	// FailoverDisabled disables retrying calls on other endpoints when an endpoint cannot serve the requested data
 	FailoverDisabled bool `yaml:"failoverDisabled" envconfig:"PROXY_FAILOVER_DISABLED"`
 	// FailoverPaths are the api path patterns eligible for endpoint failover (default: state queries)
