@@ -198,6 +198,18 @@ func (proxy *BeaconProxy) processCall(w http.ResponseWriter, r *http.Request, cl
 		return
 	}
 
+	if proxy.checkFinalizedStateQuery(r.URL) {
+		w.Header().Set("Content-Type", "text/html")
+		w.WriteHeader(http.StatusForbidden)
+
+		_, err := w.Write([]byte("Finalized State Queries Blocked"))
+		if err != nil {
+			proxy.logger.Warnf("error writing finalized state blocked response: %v", err)
+		}
+
+		return
+	}
+
 	identifier, validAuth := proxy.CheckAuthorization(r)
 	if !validAuth {
 		w.Header().Set("Content-Type", "text/html")
@@ -295,8 +307,8 @@ func getMinCgcForPath(path string) uint16 {
 }
 
 func (proxy *BeaconProxy) getEndpointForCall(r *http.Request, session *Session, clientType pool.ClientType) (endpoint *pool.Client, effectiveClientType pool.ClientType, pinned bool, err error) {
-	if proxy.config.StickyEndpoint && proxy.pool.IsClientReady(session.lastPoolClient) {
-		endpoint = session.lastPoolClient
+	if stickyClient := session.lastPoolClient.Load(); proxy.config.StickyEndpoint && proxy.pool.IsClientReady(stickyClient) {
+		endpoint = stickyClient
 	}
 
 	minCgc := getMinCgcForPath(r.URL.Path)
@@ -494,8 +506,8 @@ func (proxy *BeaconProxy) rebalanceSessions() {
 	totalSessions := 0
 
 	for _, session := range allSessions {
-		if session.lastPoolClient != nil && slices.Contains(readyClients, session.lastPoolClient) {
-			endpointTotals[session.lastPoolClient]++
+		if client := session.lastPoolClient.Load(); client != nil && slices.Contains(readyClients, client) {
+			endpointTotals[client]++
 			totalSessions++
 		}
 	}
@@ -564,7 +576,7 @@ func (proxy *BeaconProxy) rebalanceSessions() {
 			constrained := make(map[pool.ClientType][]*Session, 2)
 
 			for _, session := range allSessions {
-				if session.lastPoolClient != srcClient {
+				if session.lastPoolClient.Load() != srcClient {
 					continue
 				}
 
